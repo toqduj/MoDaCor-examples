@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "spdx_id": "CC-BY-4.0",
+  "name": "Creative Commons Attribution 4.0 International",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+  "license_file": "DATA_LICENSE.txt",
+  "attribution": "Please cite the version-specific Zenodo record for the BAM MOUSE example data, retain the creator and DOI metadata supplied there, and indicate whether changes were made."
+}

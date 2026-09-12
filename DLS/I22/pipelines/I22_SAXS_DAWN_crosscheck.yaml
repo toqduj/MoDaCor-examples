@@ -1,0 +1,178 @@
+name: I22 SAXS DAWN cross-check
+description: >-
+  Test-only I22 SAXS pipeline intended to match the DAWN processing record as
+  closely as the current MoDaCor modules allow. This deliberately excludes the
+  MoDaCor operational-pipeline extras: threshold raw-count masks, background
+  subtraction, transmission normalization, detector-efficiency correction, and
+  SAXS mask dilation.
+steps:
+  PD_sample:
+    module: AppendProcessingData
+    short_title: Load SAXS sample
+    requires_steps: []
+    configuration:
+      processing_key: sample
+      databundle_output_key: signal
+      signal_location: sample::/entry1/detector/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_signal:
+    module: AppendProcessingData
+    short_title: Load SAXS calibration shape
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: signal
+      signal_location: saxs_calibration::/entry1/calibration_data/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_mask:
+    module: AppendProcessingData
+    short_title: Load SAXS mask
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: mask
+      signal_location: saxs_mask::/entry/mask/mask
+      units_override: dimensionless
+      rank_of_data: 2
+
+  PU_sample:
+    module: PoissonUncertainties
+    short_title: Set Poisson error
+    requires_steps: [PD_sample]
+    configuration:
+      with_processing_keys: [sample]
+
+  BS_sample:
+    module: Divide
+    short_title: Channel-average bsdiode normalization
+    requires_steps: [PU_sample]
+    configuration:
+      # DAWN Channel Average over /entry1/bsdiodes/data, channelIndex=1,
+      # mathematicalOperator=DIVIDE.
+      divisor_source: sample::/modacor/normalization/bsdiodes_channel_1_mean
+      divisor_units_source: sample::/modacor/normalization/bsdiodes_channel_1_mean@units
+      divisor_uncertainties_sources:
+        bsdiodes_STD: sample::/modacor/normalization/bsdiodes_channel_1_std
+      with_processing_keys: [sample]
+
+  TI_sample:
+    module: Divide
+    short_title: SAXS count-time normalization
+    requires_steps: [BS_sample]
+    configuration:
+      divisor_source: sample::/modacor/normalization/saxs_count_time
+      divisor_units_source: sample::/modacor/normalization/saxs_count_time@units
+      with_processing_keys: [sample]
+
+  FA_sample:
+    module: ReduceDimensionality
+    short_title: Average fastest dimension
+    requires_steps: [TI_sample]
+    configuration:
+      axes: [0, 1]
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [sample]
+
+  PC_static:
+    module: PixelCoordinates3D
+    short_title: SAXS pixel coordinates
+    requires_steps: [PD_static_signal]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: saxs_calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+
+  GX_static:
+    module: XSGeometryFromPixelCoordinates
+    short_title: SAXS scattering geometry
+    requires_steps: [PC_static]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: saxs_calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+      sample_z_override:
+        value: 0.0
+        units: mm
+      wavelength_source: saxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
+      wavelength_units_source: saxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+
+  IP_static:
+    module: IndexPixels
+    short_title: Index SAXS pixels
+    requires_steps: [GX_static]
+    configuration:
+      averaging_direction: azimuthal
+      q_min: 0.0004319287334315461
+      q_max: 0.3363124283455742
+      q_limits_unit: 1/angstrom
+      bin_type: linear
+      psi_min: -180.0
+      psi_max: 180.0
+      psi_limits_unit: degree
+      n_bins: 1608
+      with_processing_keys: [static]
+
+  CP_static_sample_maps:
+    module: CopyDataBundleKeys
+    short_title: Attach SAXS mask and geometry
+    requires_steps: [FA_sample, IP_static, PD_static_mask]
+    configuration:
+      with_processing_keys: [sample, static]
+      data_keys: [mask, Q, Psi, TwoTheta, CosAlpha, Omega, pixel_index]
+      copy: false
+
+  PO:
+    module: PolarizationCorrection
+    short_title: DAWN polarization correction
+    requires_steps: [CP_static_sample_maps]
+    configuration:
+      # DAWN Powder Diffraction Intensity Corrections:
+      # applyPolarisationCorrection=true, polarisationFactor=0.9,
+      # polarisationAngularOffset=0.0.
+      with_processing_keys: [sample]
+      mode: linear_fraction
+      polarization_factor: 0.9
+      polarization_angular_offset: 0.0
+      polarization_angular_offset_units: degree
+
+  SP:
+    module: SolidAngleCorrection
+    short_title: Solid-angle correction
+    requires_steps: [PO]
+    configuration:
+      with_processing_keys: [sample]
+
+  AV:
+    module: IndexedAverager
+    short_title: SAXS azimuthal integration
+    requires_steps: [SP]
+    configuration:
+      averaging_direction: azimuthal
+      use_signal_weights: true
+      use_signal_uncertainty_weights: false
+      uncertainty_weight_key: null
+      with_processing_keys: [sample]
+
+  AU:
+    module: Multiply
+    short_title: DAWN absolute intensity scalar
+    requires_steps: [AV]
+    configuration:
+      # DAWN Multiply by Scalar: 3.8e-15. The preprocessed file stores the
+      # same provisional scalar and units under /modacor/calibration.
+      multiplier_source: sample::/modacor/calibration/absolute_intensity_factor
+      multiplier_units_source: sample::/modacor/calibration/absolute_intensity_factor@units
+      with_processing_keys: [sample]
+

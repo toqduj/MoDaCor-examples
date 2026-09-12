@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "instrument": "BAM/MOUSE",
+  "data_version": "development",
+  "data_license": {
+    "spdx_id": "CC-BY-4.0",
+    "name": "Creative Commons Attribution 4.0 International",
+    "declaration": "DATA_LICENSE.json",
+    "license_file": "DATA_LICENSE.txt",
+    "license_sha256": "b76d0a3ddfd7051402fc35f432eb95b6a9f2ff5e11a44f4f095856fc0762c9aa",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+    "attribution": "Please cite the version-specific Zenodo record for the BAM MOUSE example data, retain the creator and DOI metadata supplied there, and indicate whether changes were made."
+  },
+  "zenodo": {
+    "record_id": null,
+    "doi": null,
+    "concept_doi": null
+  },
+  "archive": {
+    "filename": "BAM-MOUSE-data.zip",
+    "url": null,
+    "size_bytes": null,
+    "sha256": null
+  },
+  "files": [
+    {
+      "path": "data/MOUSE_20260903_1_123_stacked_modacor.nxs",
+      "size_bytes": 32953053,
+      "sha256": "885dac4758c87ae0fe900ce54d33dbb4cc736f9a42994e7013b72adb33404037"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_125_stacked_modacor.nxs",
+      "size_bytes": 30357564,
+      "sha256": "e1fc9be921d1d0f8516a3bb58d118a1fc503daea07ceea68cf6b583ffa64fd46"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_127_stacked_modacor.nxs",
+      "size_bytes": 34494917,
+      "sha256": "23062246bc7efc778fbba0ffb28ba23793c0eb68200751b01f5fa42968a4b048"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_160_stacked_modacor.nxs",
+      "size_bytes": 27038574,
+      "sha256": "e5a54520e3957c144241ba5b814d18e21a2653a7a3e92ceae2a24e76d2b798af"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_161_stacked_modacor.nxs",
+      "size_bytes": 27230659,
+      "sha256": "082ef322c527f5d0ef0b6a5af9110b29b7918d2c36827979b6bf5919fa8debe1"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_162_stacked_modacor.nxs",
+      "size_bytes": 27506978,
+      "sha256": "0e7da723196bf5ca2428b9f32c4a163457dd4c426cbdb8de528f70617b48c010"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_163_stacked_modacor.nxs",
+      "size_bytes": 27773391,
+      "sha256": "baf44f802492f81f650f643576e6aae8ab2e87f64329a550aac87f9b9f5e5446"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_164_stacked_modacor.nxs",
+      "size_bytes": 27966550,
+      "sha256": "9239a286d1cc9690e13356e37936c40de3176bf3d93c743c85f7221cfb86fa40"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_165_stacked_modacor.nxs",
+      "size_bytes": 28157574,
+      "sha256": "b05d1dc8d117a2d7bf26d9facfcde6d28d0fce623e7775f344e0572a3688d481"
+    },
+    {
+      "path": "data/MOUSE_20260903_1_166_stacked_modacor.nxs",
+      "size_bytes": 28372190,
+      "sha256": "d28c05989f48e4a3daf491dbe49b794a053feb7c6e1c3fc1963557ccf0744af7"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_123_stacked_modacor.nxs",
+      "size_bytes": 42569077,
+      "sha256": "a45c1924d4e8812d0b157ac48cf1b18ea0a1b0008f9d59d085ff3da0b80e1cf3"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_125_stacked_modacor.nxs",
+      "size_bytes": 70122450,
+      "sha256": "f7f026d7ec50c5931b70e15df746706c7b8bedaf7b2aa3a34f0633d94cdaab09"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_127_stacked_modacor.nxs",
+      "size_bytes": 57736335,
+      "sha256": "a6e67016364c4eb7dbc1be45b1e9e04abec7500d36f195beb681bb2e32b20b76"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_160_stacked_modacor.nxs",
+      "size_bytes": 28134610,
+      "sha256": "02d81daa6f9ffb2e7fb8a3b8742644eba53b3c7c8d687ac09778f7fb6b632bf7"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_161_stacked_modacor.nxs",
+      "size_bytes": 28566316,
+      "sha256": "457e00ff7f2787abee62acfcdb005a50ad394db1daa34e0d567cc3bd217aa51a"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_162_stacked_modacor.nxs",
+      "size_bytes": 28857283,
+      "sha256": "c2a92cb90b68c9b9f27a746cbae562a5a74bdd31b2b486dfd7bd2da469f163d2"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_163_stacked_modacor.nxs",
+      "size_bytes": 29058570,
+      "sha256": "b5ebd7439903e44e739a0fc43adb7f9d51ef246f617ee52f42102a72cc3c8bb6"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_164_stacked_modacor.nxs",
+      "size_bytes": 29175499,
+      "sha256": "e11035ad9c32c64d1c876777e8cc684fd9a99c292e132c7ab3582e3b0bc95b39"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_165_stacked_modacor.nxs",
+      "size_bytes": 29133351,
+      "sha256": "25238241d3508faaee5b281047379ad4e29a92e954452f77e5d3a3b41234d464"
+    },
+    {
+      "path": "data/MOUSE_20260903_2_166_stacked_modacor.nxs",
+      "size_bytes": 29032501,
+      "sha256": "dc6e66389cf8b1f56c5838d07a028c6af0ca2f922ab562bf904e051a27753c93"
+    }
+  ]
+}

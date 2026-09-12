@@ -1,0 +1,396 @@
+name: I22 WAXS solids operando
+description: >-
+  First-pass I22 WAXS correction pipeline. The raw detector frames remain
+  externally linked from compact notebook-preprocessed measurement files; the
+  preprocessor only reshapes frame-wise normalization arrays. Detector geometry
+  is resolved by MoDaCor directly from the NeXus calibration files. I22 flux
+  and transmission normalization is handled through the beamstop diode; the
+  I0 transmission value is retained for future sample-absorption estimates and
+  is not divided out in this pipeline.
+steps:
+  PD_sample:
+    module: AppendProcessingData
+    short_title: Load WAXS sample
+    requires_steps: []
+    configuration:
+      processing_key: sample
+      databundle_output_key: signal
+      signal_location: sample::/entry1/Pilatus2M_WAXS/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_background:
+    module: AppendProcessingData
+    short_title: Load WAXS background
+    requires_steps: []
+    configuration:
+      processing_key: background
+      databundle_output_key: signal
+      signal_location: background::/entry1/Pilatus2M_WAXS/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_signal:
+    module: AppendProcessingData
+    short_title: Load WAXS calibration shape
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: signal
+      signal_location: waxs_calibration::/entry1/calibration_data/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_mask:
+    module: AppendProcessingData
+    short_title: Load WAXS mask
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: mask
+      signal_location: waxs_mask::/entry/mask/mask
+      units_override: dimensionless
+      rank_of_data: 2
+
+  PU_sample:
+    module: PoissonUncertainties
+    short_title: WAXS Poisson uncertainties
+    requires_steps: [MK_raw_sample]
+    configuration:
+      with_processing_keys: [sample]
+
+  MK_raw_sample:
+    module: ThresholdMask
+    short_title: Raw-count validity mask
+    requires_steps: [PD_sample]
+    configuration:
+      with_processing_keys: [sample]
+      source_basedata_key: signal
+      target_mask_key: raw_count_mask
+      lower_bound: 0.0
+      upper_bound: 10000000.0
+      mask_mode: outside
+
+  BS_sample:
+    module: Divide
+    short_title: Beamstop-diode normalization
+    requires_steps: [PU_sample]
+    configuration:
+      divisor_source: sample::/modacor/normalization/bsdiodes_channel_1_mean
+      divisor_units_source: sample::/modacor/normalization/bsdiodes_channel_1_mean@units
+      divisor_uncertainties_sources:
+        bsdiodes_STD: sample::/modacor/normalization/bsdiodes_channel_1_std
+      with_processing_keys: [sample]
+
+  TI_sample:
+    module: Divide
+    short_title: WAXS count-time normalization
+    requires_steps: [BS_sample]
+    configuration:
+      divisor_source: sample::/modacor/normalization/waxs_count_time
+      divisor_units_source: sample::/modacor/normalization/waxs_count_time@units
+      with_processing_keys: [sample]
+
+  FA_sample:
+    module: ReduceDimensionality
+    short_title: Average WAXS frames
+    requires_steps: [TI_sample]
+    configuration:
+      axes: [0, 1]
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [sample]
+
+  MK_raw_sample_reduce:
+    module: ReduceMask
+    short_title: Collapse raw-count mask
+    requires_steps: [FA_sample]
+    configuration:
+      with_processing_keys: [sample]
+      source_mask_key: raw_count_mask
+      target_mask_key: raw_count_mask
+      axes: [0, 1]
+      reduction: any
+
+  PU_background:
+    module: PoissonUncertainties
+    short_title: Background Poisson uncertainties
+    requires_steps: [MK_raw_background]
+    configuration:
+      with_processing_keys: [background]
+
+  MK_raw_background:
+    module: ThresholdMask
+    short_title: Background raw-count mask
+    requires_steps: [PD_background]
+    configuration:
+      with_processing_keys: [background]
+      source_basedata_key: signal
+      target_mask_key: raw_count_mask
+      lower_bound: 0.0
+      upper_bound: 10000000.0
+      mask_mode: outside
+
+  BS_background:
+    module: Divide
+    short_title: Background diode normalization
+    requires_steps: [PU_background]
+    configuration:
+      divisor_source: background::/modacor/normalization/bsdiodes_channel_1_mean
+      divisor_units_source: background::/modacor/normalization/bsdiodes_channel_1_mean@units
+      divisor_uncertainties_sources:
+        bsdiodes_STD: background::/modacor/normalization/bsdiodes_channel_1_std
+      with_processing_keys: [background]
+
+  TI_background:
+    module: Divide
+    short_title: Background count-time normalization
+    requires_steps: [BS_background]
+    configuration:
+      divisor_source: background::/modacor/normalization/waxs_count_time
+      divisor_units_source: background::/modacor/normalization/waxs_count_time@units
+      with_processing_keys: [background]
+
+  FA_background:
+    module: ReduceDimensionality
+    short_title: Average background frames
+    requires_steps: [TI_background]
+    configuration:
+      axes: [0, 1]
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [background]
+
+  MK_raw_background_reduce:
+    module: ReduceMask
+    short_title: Collapse background mask
+    requires_steps: [FA_background]
+    configuration:
+      with_processing_keys: [background]
+      source_mask_key: raw_count_mask
+      target_mask_key: raw_count_mask
+      axes: [0, 1]
+      reduction: any
+
+  BG:
+    module: SubtractDatabundles
+    short_title: Subtract corrected background
+    requires_steps: [MK_raw_sample_reduce, MK_raw_background_reduce]
+    configuration:
+      with_processing_keys: [sample, background]
+
+  PC_static:
+    module: PixelCoordinates3D
+    short_title: WAXS pixel coordinates
+    requires_steps: [PD_static_signal]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: waxs_calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+
+  GX_static:
+    module: XSGeometryFromPixelCoordinates
+    short_title: WAXS scattering geometry
+    requires_steps: [PC_static]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: waxs_calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+      sample_z_override:
+        value: 0.0
+        units: mm
+      wavelength_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
+      wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+
+  IP_static:
+    module: IndexPixels
+    short_title: Index WAXS pixels
+    requires_steps: [GX_static]
+    configuration:
+      averaging_direction: azimuthal
+      q_min: 4.4241476418082226
+      q_max: 54.71698841709772
+      q_limits_unit: 1/nm
+      bin_type: linear
+      psi_min: -180.0
+      psi_max: 180.0
+      psi_limits_unit: degree
+      n_bins: 1502
+      with_processing_keys: [static]
+
+  CP_static_sample_maps:
+    module: CopyDataBundleKeys
+    short_title: Attach WAXS static maps
+    requires_steps: [BG, IP_static, PD_static_mask]
+    configuration:
+      with_processing_keys: [sample, static]
+      data_keys: [mask, Q, Psi, TwoTheta, CosAlpha, Omega, pixel_index]
+      copy: false
+
+  MK_instrument_dilate:
+    module: DilateMask
+    short_title: Dilate WAXS mask
+    requires_steps: [CP_static_sample_maps]
+    configuration:
+      with_processing_keys: [sample]
+      source_mask_key: mask
+      target_mask_key: mask
+      radius: 1
+      footprint_shape: square
+
+  CP_background_raw_mask:
+    module: CopyDataBundleKeys
+    short_title: Attach background raw mask
+    requires_steps: [BG]
+    configuration:
+      with_processing_keys: [sample, background]
+      key_map:
+        raw_count_mask: background_raw_count_mask
+      copy: false
+
+  MK_combined:
+    module: BitwiseOrMasks
+    short_title: Combine detector masks
+    requires_steps: [MK_instrument_dilate, CP_background_raw_mask]
+    configuration:
+      with_processing_keys: [sample]
+      target_mask_key: mask
+      source_mask_keys: [raw_count_mask, background_raw_count_mask]
+
+  SP:
+    module: SolidAngleCorrection
+    short_title: WAXS solid-angle correction
+    requires_steps: [MK_combined]
+    configuration:
+      with_processing_keys: [sample]
+
+  DE:
+    module: DetectorEfficiencyCorrection
+    short_title: WAXS detector efficiency correction
+    requires_steps: [SP]
+    configuration:
+      with_processing_keys: [sample]
+      material: Si
+      density: 2.33
+      density_units: g/cm^3
+      thickness: 0.32
+      thickness_units: mm
+      wavelength_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
+      wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+      normalize_to_normal_incidence: true
+
+  AL:
+    module: AttenuatorPlateCorrection
+    short_title: WAXS aluminium attenuator correction
+    requires_steps: [DE]
+    configuration:
+      # Operational correction: recover the intensity incident on the WAXS
+      # attenuator by dividing by the angle-dependent Al transmission. Do not
+      # also divide by /modacor/normalization/transmission here: in these I22
+      # files that scalar is consistent with the WAXS Al plate transmission.
+      # The DAWN cross-check pipeline uses apply_as=multiply to reproduce
+      # DAWN's recorded behavior, but that is not the physical correction.
+      with_processing_keys: [sample]
+      material: Al
+      density: 2.699
+      density_units: g/cm^3
+      thickness: 0.1
+      thickness_units: cm
+      wavelength_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
+      wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+      normalize_to_normal_incidence: false
+      apply_as: divide
+
+  PO:
+    module: PolarizationCorrection
+    short_title: WAXS polarization correction
+    requires_steps: [AL]
+    configuration:
+      with_processing_keys: [sample]
+      mode: linear_fraction
+      polarization_factor: 0.9
+      polarization_angular_offset: 0.0
+      polarization_angular_offset_units: degree
+
+  AV:
+    module: IndexedAverager
+    short_title: WAXS azimuthal integration
+    requires_steps: [SV_2D, PL_2D]
+    configuration:
+      averaging_direction: azimuthal
+      use_signal_weights: true
+      use_signal_uncertainty_weights: false
+      uncertainty_weight_key: null
+      with_processing_keys: [sample]
+
+  CU:
+    module: CombineUncertaintiesMax
+    short_title: Combine WAXS uncertainties
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: signal
+      combinations:
+        combined: [Poisson, SEM]
+      ignore_missing: true
+
+  AU:
+    module: Multiply
+    short_title: Absolute intensity scale
+    requires_steps: [CU]
+    configuration:
+      multiplier_source: sample::/modacor/calibration/absolute_intensity_factor
+      multiplier_units_source: sample::/modacor/calibration/absolute_intensity_factor@units
+      with_processing_keys: [sample]
+
+  PL_IQ:
+    module: Plot1DVisualization
+    short_title: Live WAXS I(Q) plot
+    requires_steps: [AU]
+    configuration:
+      target: plots::waxs-1d
+      x_path: /sample/Q/signal
+      y_path: /sample/signal/signal
+      x_units: 1/nm
+      error_bar_thickness: 2.0
+      error_bar_opacity: 0.65
+      error_bar_width: 3
+      xerr_uncertainty_names: [uncertainty_combined, SEM, STD]
+      yerr_uncertainty_names: [combined, uncertainty_pixelvalues, SEM, STD, Poisson]
+      title: WAXS corrected I(Q)
+
+  SV_IQ:
+    module: SinkProcessingData
+    short_title: Save WAXS sample after I(Q) plot
+    requires_steps: [AU]
+    configuration:
+      target: result_hdf::after_plot_iq
+      data_paths:
+        - /sample
+
+  PL_2D:
+    module: Plot2DVisualization
+    short_title: Live WAXS corrected 2D image
+    requires_steps: [PO]
+    configuration:
+      target: plots::waxs-2d
+      data_path: /sample/signal/signal
+      title: WAXS corrected 2D detector image
+      colormap: Viridis
+
+  SV_2D:
+    module: SinkProcessingData
+    short_title: Save WAXS sample after 2D plot
+    requires_steps: [PO]
+    configuration:
+      target: result_hdf::after_plot_2d
+      data_paths:
+        - /sample

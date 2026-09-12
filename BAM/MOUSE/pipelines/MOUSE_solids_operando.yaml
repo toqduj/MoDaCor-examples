@@ -1,0 +1,408 @@
+name: Operando samples for the MOUSE instrument
+description: Processing pipeline for samples measured operando on the MOUSE instrument. This uses a sample_static file to access (and buffer) unchanging metadata. 
+steps:
+
+  # no iosource additions here (AppendSource), in this use case they're defined in the script that runs the pipeline
+  # we just define here what data we want to work with from the sources. 
+
+  # -----------------------
+  # Initial data loading into processing data
+  # -----------------------
+  PD_sample:
+    module: AppendProcessingData
+    short_title: "Add sample data to PD"
+    requires_steps: []
+    configuration: 
+      processing_key: sample
+      databundle_output_key: signal
+      signal_location: sample::/entry1/instrument/detector00/data
+      units_location: sample::/entry1/instrument/detector00/data@units
+      uncertainties_sources: {'poisson': 'sample::/entry1/instrument/detector00/data_uncertainties_poisson'}
+      rank_of_data: 2
+
+  PD_sample_static_signal:
+    module: AppendProcessingData
+    short_title: "Add static sample shape signal to PD"
+    requires_steps: []
+    configuration:
+      processing_key: sample_static
+      databundle_output_key: signal
+      signal_location: sample_static::/entry1/instrument/detector00/data
+      units_location: sample_static::/entry1/instrument/detector00/data@units
+      rank_of_data: 2
+
+  PD_sample_static_mask:
+    module: AppendProcessingData
+    short_title: "Add pixel mask to PD"
+    requires_steps: []  # PD_sample
+    configuration: 
+      processing_key: sample_static
+      databundle_output_key: mask
+      signal_location: sample_static::/entry1/instrument/detector00/detectorSpecific/pixel_mask
+      # has no units or uncertainties
+      # units_location: sample::/entry1/instrument/detector00/data@units
+      # uncertainties_sources: {'poisson': 'sample::/entry1/instrument/detector00/data_uncertainties_poisson'}
+      rank_of_data: 2
+
+  PD_sample_static_bs_mask:
+    module: AppendProcessingData
+    short_title: "Add beamstop mask to PD"
+    requires_steps: []  # PD_sample
+    configuration: 
+      processing_key: sample_static
+      databundle_output_key: bs_mask
+      signal_location: sample_static::/entry1/instrument/mask/Mask
+      # has no units or uncertainties
+      rank_of_data: 2
+
+  PD_background:
+    module: AppendProcessingData
+    short_title: "Add bgnd data to PD"
+    requires_steps: []
+    configuration: 
+      processing_key: background
+      databundle_output_key: signal
+      signal_location: background::/entry1/instrument/detector00/data
+      units_location: background::/entry1/instrument/detector00/data@units
+      uncertainties_sources: {'poisson': 'background::/entry1/instrument/detector00/data_uncertainties_poisson'}
+      rank_of_data: 2
+
+  # -----------------------
+  # Data reduction steps for sample
+  # -----------------------
+
+  MK_merge_static:
+    module: BitwiseOrMasks
+    short_title: "Combine pixel and BS masks"
+    requires_steps: [PD_sample_static_mask, PD_sample_static_bs_mask]
+    configuration:
+      with_processing_keys: [sample_static]
+      target_mask_key: mask
+      source_mask_keys: [bs_mask]
+  
+  TI:
+    module: Divide
+    short_title: "Time normalization"
+    requires_steps: [PD_sample]
+    configuration:
+      divisor_source: sample::/entry1/instrument/detector00/count_time
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::/entry1/instrument/detector00/detector_readout_time
+      divisor_units_source: sample::/entry1/instrument/detector00/count_time@units
+      with_processing_keys: [sample]
+
+  DC:
+    module: Subtract
+    short_title: "Darkcurrent subtraction"
+    requires_steps: [TI]
+    configuration:
+      subtrahend_source: sample_static::/entry1/instrument/detector00/darkcurrent
+      # subtrahend_uncertainties_sources:
+      #   propagate_to_all: defaults::/entry1/instrument/detector00/darkcurrent_uncertainty
+      subtrahend_units_source: sample_static::/entry1/instrument/detector00/darkcurrent@units
+      with_processing_keys: [sample]
+
+  FL:
+    module: Divide
+    short_title: "Flux normalization"
+    requires_steps: [DC]
+    configuration:
+      divisor_source: sample::/entry1/sample/beam/flux
+      # divisor_uncertainties_sources:
+      #   propagate_to_all: sample::/entry1/sample/beam/flux_uncertainty
+      divisor_units_source: sample::/entry1/sample/beam/flux@units
+      with_processing_keys: [sample]
+
+  TR:
+    module: Divide
+    short_title: "Transmission normalization"
+    requires_steps: [FL]
+    configuration:
+      divisor_source: sample::/entry1/sample/transmission
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::/entry1/sample/largest_scattering_probability_estimate  # terrible, but I need a placeholder uncertainty
+      divisor_units_source: sample::/entry1/sample/transmission@units
+      with_processing_keys: [sample]
+
+  FA:
+    module: ReduceDimensionality
+    short_title: "Frame averaging"
+    requires_steps: [TR]
+    configuration:
+      axes: 0
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [sample]
+
+  # FA2:
+  #   module: ReduceDimensionality
+  #   short_title: "Second frame averaging"
+  #   requires_steps: [FA]
+  #   configuration:
+  #     axes: 0
+  #     use_weights: true
+  #     nan_policy: propagate
+  #     reduction: mean
+  #     with_processing_keys: [sample]
+
+
+  # -----------------------
+  # Data reduction steps for background
+  # -----------------------
+  TI_bg:
+    module: Divide
+    short_title: "Time normalization"
+    requires_steps: [PD_background]
+    configuration:
+      divisor_source: background::/entry1/instrument/detector00/count_time
+      divisor_uncertainties_sources:
+        propagate_to_all: background::/entry1/instrument/detector00/detector_readout_time
+      divisor_units_source: background::/entry1/instrument/detector00/count_time@units
+      with_processing_keys: [background]
+
+  DC_bg:
+    module: Subtract
+    short_title: "Darkcurrent subtraction"
+    requires_steps: [TI_bg]
+    configuration: 
+      subtrahend_source: background::/entry1/instrument/detector00/darkcurrent
+      # subtrahend_uncertainties_sources:
+      #   propagate_to_all: defaults::/entry1/instrument/detector00/darkcurrent_uncertainty
+      subtrahend_units_source: background::/entry1/instrument/detector00/darkcurrent@units
+      with_processing_keys: [background]
+
+  FL_bg:
+    module: Divide
+    short_title: "Flux normalization"
+    requires_steps: [DC_bg]
+    configuration:
+      divisor_source: background::/entry1/sample/beam/flux
+      # divisor_uncertainties_sources:
+      #   propagate_to_all: background::/entry1/sample/beam/flux_uncertainty
+      divisor_units_source: background::/entry1/sample/beam/flux@units
+      with_processing_keys: [background]
+
+  TR_bg:
+    module: Divide
+    short_title: "Transmission normalization"
+    requires_steps: [FL_bg]
+    configuration:
+      divisor_source: background::/entry1/sample/transmission_averaged/mean
+      divisor_uncertainties_sources:
+        propagate_to_all: background::/entry1/sample/transmission_averaged/sem
+      divisor_units_source: background::/entry1/sample/transmission_averaged/mean@units
+      with_processing_keys: [background]
+
+  FA_bg:
+    module: ReduceDimensionality
+    short_title: "Frame averaging"
+    requires_steps: [TR_bg]
+    configuration:
+      axes: 0
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [background]
+
+  FA2_bg:
+    module: ReduceDimensionality
+    short_title: "Second frame averaging"
+    requires_steps: [FA_bg]
+    configuration:
+      axes: 0
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [background]
+
+
+  # -----------------------
+  # Background subtraction
+  # -----------------------
+  BG:
+    module: SubtractDatabundles
+    short_title: "Background subtraction"
+    requires_steps: [FA, FA2_bg]
+    configuration: 
+      with_processing_keys:
+        - sample
+        - background
+
+  # -----------------------
+  # Geometry (shared defaults-driven parts via anchor)
+  # -----------------------
+
+  PC_static:
+    module: PixelCoordinates3D
+    short_title: "Calc. Pixel coordinates"
+    requires_steps: [MK_merge_static, PD_sample_static_signal]
+    configuration:
+      with_processing_keys: [sample_static]  # this is the anchor that allows us to share the geometry configuration for static and dynamic geometry steps.
+
+      # --- detector plane intersection along beam (z) ---
+      # Example: you said you’ll preprocess / average det_x to a scalar mean + SEM.
+      det_coord_z_source: "sample_static::/entry1/instrument/detector00/transformations/det_x"
+      det_coord_z_units_source: "sample_static::/entry1/instrument/detector00/transformations/det_x@units"
+      # I don't have uncertainties yet. 
+
+      # --- detector origin offset in lab-frame x/y (encodes beam center offset in meters) ---
+      # If you don’t have offsets, store zeros as scalar datasets and point to them.
+      det_coord_x_source: "sample_static::/entry1/instrument/detector00/transformations/det_y"
+      det_coord_x_units_source: "sample_static::/entry1/instrument/detector00/transformations/det_y@units"
+      # ibid
+
+      det_coord_y_source: "sample_static::/entry1/instrument/detector00/transformations/det_z"
+      det_coord_y_units_source: "sample_static::/entry1/instrument/detector00/transformations/det_z@units"
+
+      # --- pixel pitch (slow/fast) ---
+      # Units should be length/pixel, e.g. m/pixel
+      pixel_pitch_fast_source: "sample_static::/entry1/instrument/detector00/x_pixel_size"
+      pixel_pitch_fast_units_source: "sample_static::/entry1/instrument/detector00/x_pixel_size@units"
+      pixel_pitch_slow_source: "sample_static::/entry1/instrument/detector00/y_pixel_size"
+      pixel_pitch_slow_units_source: "sample_static::/entry1/instrument/detector00/y_pixel_size@units"
+      # should actually be this, but MOUSE data doesn't have it yet in the right units:
+      # pixel_pitch_slow_source: "sample::/entry1/instrument/detector00/detector_module/slow_pixel_direction"
+      # pixel_pitch_slow_units_source: "sample::/entry1/instrument/detector00/detector_module/slow_pixel_direction@units"
+      
+      # pixel_pitch_fast_source: "sample::/entry1/instrument/detector00/detector_module/fast_pixel_direction"
+      # pixel_pitch_fast_units_source: "sample::/entry1/instrument/detector00/detector_module/fast_pixel_direction@units"
+
+      # --- basis vectors (defaults shown) ---
+      # These are unit direction vectors in lab-frame NeXus axes.
+      basis_fast:   [-1.0, 0.0, 0.0]  # mouse detector coordinates should be inverted
+      basis_slow:   [0.0, -1.0, 0.0]  # mouse detector coordinates should be inverted
+      basis_normal: [0.0, 0.0, 1.0]  
+
+  GX_static:
+    module: XSGeometryFromPixelCoordinates
+    short_title: "XS Geometry calc"
+    requires_steps: [PC_static]
+    configuration:
+      with_processing_keys:
+        - sample_static
+
+      # sample position along beam (scalar length)
+      sample_z_source: sample_static::/entry1/sample/transformations/sample_x
+      sample_z_units_source: sample_static::/entry1/sample/transformations/sample_x@units
+
+      # wavelength (scalar length)
+      wavelength_source: sample_static::/entry1/sample/beam/incident_wavelength
+      wavelength_units_source: sample_static::/entry1/sample/beam/incident_wavelength@units
+      wavelength_uncertainties_sources:
+        propagate_to_all: sample_static::/entry1/sample/beam/wavelength_error
+
+      # pixel pitch (length / pixel) for Omega
+      pixel_pitch_fast_source:       "sample_static::/entry1/instrument/detector00/x_pixel_size"
+      pixel_pitch_fast_units_source: "sample_static::/entry1/instrument/detector00/x_pixel_size@units"
+      pixel_pitch_slow_source:       "sample_static::/entry1/instrument/detector00/y_pixel_size"
+      pixel_pitch_slow_units_source: "sample_static::/entry1/instrument/detector00/y_pixel_size@units"
+
+      # optional: detector normal in lab frame (unit vector)
+      detector_normal: [0.0, 0.0, 1.0]
+
+  # -----------------------
+  # Precalculation for azimuthal averaging
+  # -----------------------
+  IP_static:
+    module: IndexPixels
+    short_title: "Index pixels for averaging"
+    requires_steps: [GX_static]
+    configuration: 
+      averaging_direction: azimuthal
+      q_min: 0.01
+      q_max: 60.0
+      q_limits_unit: nm^-1
+      bin_type: log
+      psi_min: -180.0
+      psi_max: 180.0
+      psi_limits_unit: degrees
+      n_bins: 200
+      with_processing_keys: [sample_static]
+
+  # copy (in this case, link by reference) precomputed into sample data. 
+  CP_static_sample_maps:
+    module: CopyDataBundleKeys
+    short_title: "Attach static maps to sample"
+    requires_steps: [IP_static, BG]
+    configuration:
+      with_processing_keys: [sample, sample_static]  # target, source
+      data_keys: [mask, Q, Psi, Omega, pixel_index]
+      copy: false
+
+  # -----------------------
+  # Solid-angle normalization
+  # -----------------------
+  SP:
+    module: SolidAngleCorrection
+    short_title: "Solid angle correction"
+    requires_steps: [CP_static_sample_maps]
+    configuration: 
+      with_processing_keys: [sample]
+
+  # -----------------------
+  # Thickness normalization
+  # -----------------------
+
+  TH: 
+    module: Divide
+    short_title: "Thickness normalization"
+    requires_steps: [SP]
+    configuration:
+      divisor_source: sample::/entry1/sample/thickness
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::/entry1/instrument/detector00/detector_readout_time  # again, terrible placeholder uncertainty, but I don't have thickness uncertainties in the data yet
+      divisor_units_source: sample::/entry1/sample/thickness@units
+      with_processing_keys: [sample]
+
+  # -----------------------
+  # averaging
+  # -----------------------
+
+
+  AV:
+    module: IndexedAverager
+    short_title: "Azimuthal averaging"
+    requires_steps: [TH]
+    configuration: 
+      averaging_direction: azimuthal
+      use_signal_weights: true
+      use_signal_uncertainty_weights: false
+      uncertainty_weight_key: null
+      with_processing_keys: [sample]
+
+  CU: # combine uncertainties for poisson and SEM
+    module: CombineUncertaintiesMax
+    short_title: "Max of poisson and SEM unc."
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: signal
+      combinations:
+        uncertainty_pixelvalues: ["poisson", "SEM"]
+      drop_source_keys: false
+      ignore_missing: true
+
+  CUQ: # combine uncertainties for the Q vector
+    module: CombineUncertainties
+    short_title: "Combine Q vector unc."
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: Q
+      combinations:
+        uncertainty_combined: ["SEM", 'detector_position_jitter', 'sample_position_jitter', 'wavelength_jitter', 'pixel_index_slow', 'pixel_pitch_jitter', 'pixel_index_fast']
+      drop_source_keys: false
+      ignore_missing: true
+
+  # DO:  # data output
+  #   module: SinkProcessingData
+  #   short_title: "Export to CSV"
+  #   requires_steps: [CUQ, CU]
+  #   configuration:
+  #     target: "export_csv::"
+  #     data_paths:
+  #       - /sample/Q/signal
+  #       - /sample/signal/signal
+  #       - /sample/signal/uncertainties/uncertainty_pixelvalues
+  #       - /sample/Q/uncertainties/uncertainty_combined

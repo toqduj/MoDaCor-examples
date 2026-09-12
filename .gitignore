@@ -1,0 +1,25 @@
+.DS_Store
+**/.DS_Store
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+__pycache__/
+**/__pycache__/
+.ruff_cache/
+**/.ruff_cache/
+*.py[cod]
+.venv/
+**/.venv/
+work/
+**/work/
+modacor_output/
+**/modacor_output/
+modacor_preprocessed/
+**/modacor_preprocessed/
+*.log
+
+# Instrument payloads are versioned as immutable Zenodo archives. Git tracks
+# the adjacent data-manifest.json files, not the extracted binary data trees.
+**/data/
+
+# Locally built release artifacts.
+dist/

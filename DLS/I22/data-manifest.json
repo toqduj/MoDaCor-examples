@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "instrument": "DLS/I22",
+  "data_version": "development",
+  "data_license": null,
+  "zenodo": {
+    "record_id": null,
+    "doi": null,
+    "concept_doi": null
+  },
+  "archive": {
+    "filename": "DLS-I22-data.zip",
+    "url": null,
+    "size_bytes": null,
+    "sha256": null
+  },
+  "files": [
+    {
+      "path": "data/i22-977723-I0.h5",
+      "size_bytes": 1897776,
+      "sha256": "4604352960360f1c7f0895c2c64333595503aa33ed41467533cfaa44d0fa6a08"
+    },
+    {
+      "path": "data/i22-977723-Pilatus2M_SAXS.h5",
+      "size_bytes": 26154560,
+      "sha256": "4a8c7507e66d9a0bc9229416e6e40664d050d199405f1bcd8f0a4e02cf701668"
+    },
+    {
+      "path": "data/i22-977723-Pilatus2M_WAXS.h5",
+      "size_bytes": 72282897,
+      "sha256": "25f53347fd3834bd26ac5a68386fedb632ffe83ee22c9ba6c3b0f53b31bdb080"
+    },
+    {
+      "path": "data/i22-977723-bsdiodes.h5",
+      "size_bytes": 1908760,
+      "sha256": "7f634755bbc0989a7e37e9dc8602e494a48875be93c7b43a3815b9456570f9ab"
+    },
+    {
+      "path": "data/i22-977723-user_tetramm.h5",
+      "size_bytes": 1792889,
+      "sha256": "9498f7323ab270b9e6864d302850c9ae1c059beb21b5156ed66d5e724b56313b"
+    },
+    {
+      "path": "data/i22-977723.nxs",
+      "size_bytes": 442704,
+      "sha256": "9ace0d0ec8adacef204ae994d2a49f1328540c69fb534c5017084af0e51483ca"
+    },
+    {
+      "path": "data/i22-978003-I0.h5",
+      "size_bytes": 17632894,
+      "sha256": "a19569d00fc39e68f23c8e5b91823850d4a277d4e82079dd35592c071d92915f"
+    },
+    {
+      "path": "data/i22-978003-Pilatus2M_SAXS.h5",
+      "size_bytes": 105176198,
+      "sha256": "1ad66719cf08f913fd51e3d8250c20053b4d4ce85f8176d9fc21a46bb68a85aa"
+    },
+    {
+      "path": "data/i22-978003-Pilatus2M_WAXS.h5",
+      "size_bytes": 126336867,
+      "sha256": "09eda9ce02d39bb340b25f2a4ae4f3c1a611e3a7f43ed8c6b4b91c39742bb317"
+    },
+    {
+      "path": "data/i22-978003-bsdiodes.h5",
+      "size_bytes": 17632894,
+      "sha256": "5d0285bdcf6dde10c6ca1b7432cb8ad5b6c2b9cd849fa7548346494800edfee5"
+    },
+    {
+      "path": "data/i22-978003-user_tetramm.h5",
+      "size_bytes": 17632894,
+      "sha256": "1750cc0ef968465faaaf949e4793ae8b2354e4c14e2304ad54528dc60d93d4fe"
+    },
+    {
+      "path": "data/i22-978003.nxs",
+      "size_bytes": 442704,
+      "sha256": "9d054bba7621b80affd5232883e10d4946fdb619e8b8986e2af23f9abc2ea07c"
+    },
+    {
+      "path": "data/i22-978008-I0.h5",
+      "size_bytes": 17632894,
+      "sha256": "cdcf5aba08ebe964387f8415e0ae6f4f4e924d668296165a9736016c19f40fda"
+    },
+    {
+      "path": "data/i22-978008-Pilatus2M_SAXS.h5",
+      "size_bytes": 104906587,
+      "sha256": "a6f0061f0836e94f7277ce97423e13fc747f1e888c884236efbf5d31ca1950d2"
+    },
+    {
+      "path": "data/i22-978008-Pilatus2M_WAXS.h5",
+      "size_bytes": 126239371,
+      "sha256": "5dd1a19313757d92309a8856751c58c2b9f303aece6113e193ab0c06b17408e3"
+    },
+    {
+      "path": "data/i22-978008-bsdiodes.h5",
+      "size_bytes": 17632894,
+      "sha256": "42aa69f1fb953e4f06cff8207f981df8e0f5a9ddafa8742003ecd0f5171c80f0"
+    },
+    {
+      "path": "data/i22-978008-user_tetramm.h5",
+      "size_bytes": 17632894,
+      "sha256": "b99d2dd16b0c706d55c76c4ad56571a430e28fdf2b1a11c622b328a187f7dbd2"
+    },
+    {
+      "path": "data/i22-978008.nxs",
+      "size_bytes": 442704,
+      "sha256": "55ed2ced4720b1b962421147f12ed984aa0aeb63eb394a061a2c22fcc8b283e6"
+    },
+    {
+      "path": "data/i22-978013-I0.h5",
+      "size_bytes": 17632894,
+      "sha256": "29ad9bfdda417b81bc1c97ff84bb047f84f6a2099942744669a78368f3e161ba"
+    },
+    {
+      "path": "data/i22-978013-Pilatus2M_SAXS.h5",
+      "size_bytes": 104531544,
+      "sha256": "852656c6dcda50a1a95b904f3a0c9b623271cff6e360ef92b64a8c3af94371ae"
+    },
+    {
+      "path": "data/i22-978013-Pilatus2M_WAXS.h5",
+      "size_bytes": 126071032,
+      "sha256": "8ae132c519ba4c998285c0e1b1a5700a0de6aa169c69116c8e767ab61437c1f6"
+    },
+    {
+      "path": "data/i22-978013-bsdiodes.h5",
+      "size_bytes": 17632894,
+      "sha256": "942301568942d338bc3756664824415e1c500f347661d98eed7b05bc7eceea1c"
+    },
+    {
+      "path": "data/i22-978013-user_tetramm.h5",
+      "size_bytes": 17632894,
+      "sha256": "6c958d7008c69f12db4b2b7c6a72c7962452ca14af9d3d76f4bb135e25ed6bdd"
+    },
+    {
+      "path": "data/i22-978013.nxs",
+      "size_bytes": 442704,
+      "sha256": "ac1ed5193763f41fb11d3cbcc34e856777eb954cd621f17f9536ae0732349cb6"
+    },
+    {
+      "path": "data/i22-978018-I0.h5",
+      "size_bytes": 17632894,
+      "sha256": "60893fe2cfea2f5a4b918d1843aaf68a45347cab415c196befb2e0d0e48a8310"
+    },
+    {
+      "path": "data/i22-978018-Pilatus2M_SAXS.h5",
+      "size_bytes": 104274702,
+      "sha256": "0d2a311480fccbf0f003606dd5838b980e4c3865729fcdfa8d4f0175be05cef6"
+    },
+    {
+      "path": "data/i22-978018-Pilatus2M_WAXS.h5",
+      "size_bytes": 125906112,
+      "sha256": "2eb6981df8add927d8169e499263cb78c0feb74868a313efe23f2481e5e2c689"
+    },
+    {
+      "path": "data/i22-978018-bsdiodes.h5",
+      "size_bytes": 17632894,
+      "sha256": "1c9010c399484f8dc412ab7964975a92e51f7ea93517aa3dfc030d4812ad0ff9"
+    },
+    {
+      "path": "data/i22-978018-user_tetramm.h5",
+      "size_bytes": 17632894,
+      "sha256": "64e0e8f0f58b13c76f7375ed8d9c29eaf751fd0f628830e2b827c66a7854760e"
+    },
+    {
+      "path": "data/i22-978018.nxs",
+      "size_bytes": 442704,
+      "sha256": "d42050cb28cd5064ec5a63a993bc8671c5080afc69a455b0a4b5ee126322c23b"
+    },
+    {
+      "path": "data/processing/SAXS_calibration.nxs",
+      "size_bytes": 9932764,
+      "sha256": "c8e4119e6ff74ed894ea302d880ae66defaff23813dfa1c14b09666a5c90d12c"
+    },
+    {
+      "path": "data/processing/SAXS_mask.nxs",
+      "size_bytes": 2480261,
+      "sha256": "4d765f0457c93ee2333e2da7137ec5bbe31880a264434c89b233f941619cfc54"
+    },
+    {
+      "path": "data/processing/WAXS_calibration.nxs",
+      "size_bytes": 9932764,
+      "sha256": "05165bdb7eab38eafa2ab67ea1fe9fb83876aec8d911907de924b0f116509da2"
+    },
+    {
+      "path": "data/processing/WAXS_mask.nxs",
+      "size_bytes": 2480261,
+      "sha256": "03e55d7d525ba24d23ba94adb5dfe81317d4a878dbdfbd177effaf2b1ac9f94c"
+    }
+  ]
+}
