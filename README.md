@@ -13,7 +13,7 @@ decisions remain open, and the final release will pin an exact MoDaCor version.
 | Facility | Instrument | Current contents | Status |
 | --- | --- | --- | --- |
 | BAM | MOUSE | Ten-configuration sample/background pair and solids pipelines | Runnable example |
-| DLS | I22 | Four SAXS/WAXS measurements, background, calibration, masks, and pipelines | Runnable preprocessing; final archive run pending |
+| DLS | I22 | Four SAXS/WAXS measurements, background, calibration, masks, and pipelines | Runnable preprocessing plus Buffer/HDF/Tiled chunk demonstrations; full archive run pending |
 | BAM | SAXSess I | Placeholder | Planned |
 | BAM | SAXSess II | Placeholder | Planned |
 | DLS | B21 | Placeholder | Planned |
@@ -57,12 +57,14 @@ The current development baseline is MoDaCor 1.7.0. The final Zenodo release
 will record an immutable MoDaCor tag or commit after every included example has
 been rerun against it. MoDaCor requires Python 3.12 or newer.
 
-From a MoDaCor source checkout:
+Create the environment in this examples repository and install the MoDaCor
+revision that the examples should exercise. Python 3.14 is used for current
+development:
 
 ```bash
-uv venv --python 3.12 .venv
+uv venv --python 3.14 .venv
 source .venv/bin/activate
-uv pip install -e ".[server,attenuation,plotting]" requests matplotlib ipykernel
+uv pip install -e "/path/to/MoDaCor[server,attenuation,plotting]" requests matplotlib ipykernel hdf5plugin
 uv pip install pre-commit
 python -m ipykernel install --user --name modacor-examples --display-name "Python (MoDaCor examples)"
 ```
