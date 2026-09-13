@@ -13,7 +13,7 @@ decisions remain open, and the final release will pin an exact MoDaCor version.
 | Facility | Instrument | Current contents | Status |
 | --- | --- | --- | --- |
 | BAM | MOUSE | Ten-configuration sample/background pair and solids pipelines | Runnable example |
-| DLS | I22 | Four SAXS/WAXS measurements, background, calibration, masks, and pipelines | Runnable preprocessing plus Buffer/HDF/Tiled chunk demonstrations; full archive run pending |
+| DLS | I22 | Four SAXS/WAXS measurements, background, calibration, masks, and four focused notebooks | Runnable batch plus Buffer/HDF/Tiled chunk demonstrations; full archive run pending |
 | BAM | SAXSess I | Placeholder | Planned |
 | BAM | SAXSess II | Placeholder | Planned |
 | DLS | B21 | Placeholder | Planned |
@@ -64,7 +64,7 @@ development:
 ```bash
 uv venv --python 3.14 .venv
 source .venv/bin/activate
-uv pip install -e "/path/to/MoDaCor[server,attenuation,plotting]" requests matplotlib ipykernel hdf5plugin
+uv pip install -e "/path/to/MoDaCor[server,attenuation,plotting]" matplotlib ipykernel hdf5plugin
 uv pip install pre-commit
 python -m ipykernel install --user --name modacor-examples --display-name "Python (MoDaCor examples)"
 ```
