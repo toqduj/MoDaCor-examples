@@ -425,8 +425,8 @@ def validation_pipeline_yaml(pipeline_path: str | Path) -> str:
 def sample_aligned_paths(detector: str) -> tuple[str, ...]:
     return (
         DETECTOR_DATASETS[detector],
-        "/modacor/normalization/bsdiodes_channel_1_mean",
-        "/modacor/normalization/bsdiodes_channel_1_std",
+        "/modacor/normalization/i0_channel_1_mean",
+        "/modacor/normalization/i0_channel_1_sem",
         "/entry1/sample/transmission",
         "/entry1/sample/transmission_sem",
         f"/modacor/normalization/{detector.lower()}_count_time",
@@ -445,7 +445,8 @@ def upload_sample_chunk(
         scalar_path = "/modacor/calibration/absolute_intensity_factor"
         buffer.put_array(scalar_path, source[scalar_path][()])
         for data_path in (
-            "/modacor/normalization/bsdiodes_channel_1_mean",
+            "/modacor/normalization/i0_channel_1_mean",
+            "/modacor/normalization/i0_channel_1_sem",
             "/entry1/sample/transmission",
             "/entry1/sample/transmission_sem",
             f"/modacor/normalization/{detector.lower()}_count_time",

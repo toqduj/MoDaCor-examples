@@ -3,10 +3,9 @@ description: >-
   First-pass I22 SAXS correction pipeline. The raw detector frames remain
   externally linked from compact notebook-preprocessed measurement files; the
   preprocessor only reshapes or summarizes frame-wise metadata. Detector geometry
-  is resolved by MoDaCor directly from the NeXus calibration files. I22 flux
-  and transmission normalization is handled through the beamstop diode; the
-  calibrated bsdiodes/I0 sample transmission and its SEM are retained below
-  /entry1/sample for absorption-aware corrections and are not divided out here.
+  is resolved by MoDaCor directly from the NeXus calibration files. After
+  count-time normalization, the signal is divided by the calibrated sample
+  transmission and the incident I0 flux; both readouts are non-integrating.
 steps:
   PD_sample:
     module: AppendProcessingData
@@ -71,30 +70,41 @@ steps:
       upper_bound: 10000000.0
       mask_mode: outside
 
-  BS_sample:
-    module: Divide
-    short_title: Beamstop-diode normalization
-    requires_steps: [PU_sample]
-    configuration:
-      divisor_source: sample::/modacor/normalization/bsdiodes_channel_1_mean
-      divisor_units_source: sample::/modacor/normalization/bsdiodes_channel_1_mean@units
-      divisor_uncertainties_sources:
-        bsdiodes_STD: sample::/modacor/normalization/bsdiodes_channel_1_std
-      with_processing_keys: [sample]
-
   TI_sample:
     module: Divide
     short_title: SAXS count-time normalization
-    requires_steps: [BS_sample]
+    requires_steps: [PU_sample]
     configuration:
       divisor_source: sample::/modacor/normalization/saxs_count_time
       divisor_units_source: sample::/modacor/normalization/saxs_count_time@units
       with_processing_keys: [sample]
 
+  TR_sample:
+    module: Divide
+    short_title: Sample transmission normalization
+    requires_steps: [TI_sample]
+    configuration:
+      divisor_source: sample::/entry1/sample/transmission
+      divisor_units_source: sample::/entry1/sample/transmission@units
+      divisor_uncertainties_sources:
+        transmission_SEM: sample::/entry1/sample/transmission_sem
+      with_processing_keys: [sample]
+
+  FL_sample:
+    module: Divide
+    short_title: Incident I0 flux normalization
+    requires_steps: [TR_sample]
+    configuration:
+      divisor_source: sample::/modacor/normalization/i0_channel_1_mean
+      divisor_units_source: sample::/modacor/normalization/i0_channel_1_mean@units
+      divisor_uncertainties_sources:
+        I0_SEM: sample::/modacor/normalization/i0_channel_1_sem
+      with_processing_keys: [sample]
+
   FA_sample:
     module: ReduceDimensionality
     short_title: Average SAXS frames
-    requires_steps: [TI_sample]
+    requires_steps: [FL_sample]
     configuration:
       axes: [0, 1]
       use_weights: true
@@ -132,30 +142,41 @@ steps:
       upper_bound: 10000000.0
       mask_mode: outside
 
-  BS_background:
-    module: Divide
-    short_title: Background diode normalization
-    requires_steps: [PU_background]
-    configuration:
-      divisor_source: background::/modacor/normalization/bsdiodes_channel_1_mean
-      divisor_units_source: background::/modacor/normalization/bsdiodes_channel_1_mean@units
-      divisor_uncertainties_sources:
-        bsdiodes_STD: background::/modacor/normalization/bsdiodes_channel_1_std
-      with_processing_keys: [background]
-
   TI_background:
     module: Divide
     short_title: Background count-time normalization
-    requires_steps: [BS_background]
+    requires_steps: [PU_background]
     configuration:
       divisor_source: background::/modacor/normalization/saxs_count_time
       divisor_units_source: background::/modacor/normalization/saxs_count_time@units
       with_processing_keys: [background]
 
+  TR_background:
+    module: Divide
+    short_title: Background transmission normalization
+    requires_steps: [TI_background]
+    configuration:
+      divisor_source: background::/entry1/sample/transmission
+      divisor_units_source: background::/entry1/sample/transmission@units
+      divisor_uncertainties_sources:
+        transmission_SEM: background::/entry1/sample/transmission_sem
+      with_processing_keys: [background]
+
+  FL_background:
+    module: Divide
+    short_title: Background incident I0 flux normalization
+    requires_steps: [TR_background]
+    configuration:
+      divisor_source: background::/modacor/normalization/i0_channel_1_mean
+      divisor_units_source: background::/modacor/normalization/i0_channel_1_mean@units
+      divisor_uncertainties_sources:
+        I0_SEM: background::/modacor/normalization/i0_channel_1_sem
+      with_processing_keys: [background]
+
   FA_background:
     module: ReduceDimensionality
     short_title: Average background frames
-    requires_steps: [TI_background]
+    requires_steps: [FL_background]
     configuration:
       axes: [0, 1]
       use_weights: true

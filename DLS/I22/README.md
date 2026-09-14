@@ -61,6 +61,11 @@ sample readouts and both reference readouts. The results are written to
 preprocessed file. MoDaCor resolves detector geometry and corrections from the
 original NeXus metadata and the packaged calibration files.
 
+The recommended SAXS and WAXS pipelines first normalize detector counts by
+count time, then divide by sample transmission and incident `I0` flux. This
+ordering keeps the non-integrating transmission and flux readouts downstream
+of the integrating count-time correction.
+
 ## Current validation status
 
 Using MoDaCor 1.7.0, all four pipelines prepare successfully. The shared helper
@@ -83,7 +88,7 @@ Two further notebooks run that workload with the server reading sample
 slices directly. The first uses `HDFSource`; the second exposes the same
 preprocessed files through a notebook-owned read-only Tiled server and uses
 `TiledSource`. Typed source bindings apply one frame selection to the detector,
-beamstop-diode mean and uncertainty, and detector count time. The finalized
+I0 mean and SEM, sample transmission and SEM, and detector count time. The finalized
 HDFSource output is compared with the BufferSource result, and the TiledSource
 output is compared with the HDFSource result, one stored chunk at a time. A
 one-chunk real SAXS smoke run has completed through both direct transports,

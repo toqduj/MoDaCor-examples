@@ -5,10 +5,11 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from i22_helpers import preprocess_measurement
+from i22_helpers import preprocess_measurement, sample_aligned_paths
 
 
 def _write_measurement(
@@ -123,3 +124,39 @@ def test_reference_file_changes_invalidate_cached_preprocessing(tmp_path: Path) 
         assert h5["/modacor/calibration"].attrs["transmission_reference_file"].endswith(
             "open_beam_two.nxs"
         )
+
+
+def test_operational_pipelines_normalize_time_before_transmission_and_flux() -> None:
+    project_dir = Path(__file__).resolve().parents[1]
+    for detector in ("SAXS", "WAXS"):
+        pipeline = yaml.safe_load(
+            (project_dir / "pipelines" / f"I22_{detector}_solids_operando.yaml").read_text()
+        )
+        steps = pipeline["steps"]
+        assert not any(step_id.startswith("BS_") for step_id in steps)
+
+        for processing_key in ("sample", "background"):
+            suffix = f"_{processing_key}"
+            assert steps[f"TI{suffix}"]["requires_steps"] == [f"PU{suffix}"]
+            assert steps[f"TR{suffix}"]["requires_steps"] == [f"TI{suffix}"]
+            assert steps[f"FL{suffix}"]["requires_steps"] == [f"TR{suffix}"]
+            assert steps[f"FA{suffix}"]["requires_steps"] == [f"FL{suffix}"]
+
+            source_ref = "sample" if processing_key == "sample" else "background"
+            transmission = steps[f"TR{suffix}"]["configuration"]
+            flux = steps[f"FL{suffix}"]["configuration"]
+            assert transmission["divisor_source"] == f"{source_ref}::/entry1/sample/transmission"
+            assert transmission["divisor_uncertainties_sources"] == {
+                "transmission_SEM": f"{source_ref}::/entry1/sample/transmission_sem"
+            }
+            assert flux["divisor_source"] == (
+                f"{source_ref}::/modacor/normalization/i0_channel_1_mean"
+            )
+            assert flux["divisor_uncertainties_sources"] == {
+                "I0_SEM": f"{source_ref}::/modacor/normalization/i0_channel_1_sem"
+            }
+
+        aligned = sample_aligned_paths(detector)
+        assert "/modacor/normalization/i0_channel_1_mean" in aligned
+        assert "/modacor/normalization/i0_channel_1_sem" in aligned
+        assert "/modacor/normalization/bsdiodes_channel_1_mean" not in aligned
