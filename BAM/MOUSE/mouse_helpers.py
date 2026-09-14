@@ -7,9 +7,6 @@ from typing import Any
 
 import h5py
 
-from modacor.io.hdf.hdf_source import HDFSource
-from modacor.io.io_sources import IoSources
-
 BACKGROUND_REFERENCE_PATH = "/entry1/processing_required_metadata/background_file"
 DISPERSANT_REFERENCE_PATH = "/entry1/processing_required_metadata/dispersed_background_file"
 DISPLACED_DISPERSANT_FACTOR_PATH = "/entry1/sample/matrixfraction"
@@ -83,16 +80,4 @@ def source_registrations(pair: dict[str, Any]) -> list[dict[str, Any]]:
     ]
     if pair["use_dispersant_pipeline"]:
         sources.append({"ref": "dispersant", "type": "hdf", "location": str(pair["dispersant"])})
-    return sources
-
-
-def local_sources(pair: dict[str, Any]) -> IoSources:
-    sources = IoSources()
-    for registration in source_registrations(pair):
-        sources.register_source(
-            HDFSource(
-                source_reference=registration["ref"],
-                resource_location=registration["location"],
-            )
-        )
     return sources

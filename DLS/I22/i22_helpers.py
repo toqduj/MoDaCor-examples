@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -12,7 +13,7 @@ import h5py
 import numpy as np
 import yaml
 
-from modacor.client import BufferClient
+from modacor.client import SourceBufferClient
 from modacor.io.chunking import (
     AxisSelector,
     ChunkArrayLayout,
@@ -28,7 +29,8 @@ DETECTOR_DATASETS = {
     "SAXS": "/entry1/detector/data",
     "WAXS": "/entry1/Pilatus2M_WAXS/data",
 }
-PREPROCESSING_VERSION = "2026-09-02-i22-normalization-v3"
+PREPROCESSING_VERSION = "2026-09-13-i22-normalization-v4"
+BSDIODES_CHANNEL = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,12 +94,27 @@ def _write_dataset(group: h5py.Group, name: str, values: Any, *, units: str | No
     return dataset
 
 
-def _needs_rewrite(output_file: Path, *, overwrite: bool) -> bool:
+def _preprocessing_config(*, absolute_intensity_factor: float) -> dict[str, Any]:
+    if not np.isfinite(absolute_intensity_factor) or absolute_intensity_factor <= 0:
+        raise ValueError("absolute_intensity_factor must be a positive finite number.")
+    return {
+        "version": PREPROCESSING_VERSION,
+        "bsdiodes_channel": BSDIODES_CHANNEL,
+        "absolute_intensity_factor": float(absolute_intensity_factor),
+    }
+
+
+def _preprocessing_signature(config: dict[str, Any]) -> str:
+    encoded = json.dumps(config, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _needs_rewrite(output_file: Path, *, overwrite: bool, expected_signature: str) -> bool:
     if overwrite or not output_file.exists():
         return True
     try:
         with h5py.File(output_file, "r") as h5:
-            return _decode(h5.attrs.get("preprocessing_version", "")) != PREPROCESSING_VERSION
+            return _decode(h5.attrs.get("preprocessing_signature", "")) != expected_signature
     except OSError:
         return True
 
@@ -106,7 +123,6 @@ def preprocess_measurement(
     master_file: str | Path,
     output_dir: str | Path,
     *,
-    diode_channel: int = 1,
     absolute_intensity_factor: float = 3.8e-15,
     overwrite: bool = False,
 ) -> Path:
@@ -114,19 +130,23 @@ def preprocess_measurement(
 
     master_file = Path(master_file).resolve()
     output_file = Path(output_dir) / f"{master_file.stem}_modacor.nxs"
-    if not _needs_rewrite(output_file, overwrite=overwrite):
+    config = _preprocessing_config(absolute_intensity_factor=absolute_intensity_factor)
+    signature = _preprocessing_signature(config)
+    if not _needs_rewrite(output_file, overwrite=overwrite, expected_signature=signature):
         return output_file
 
     with h5py.File(master_file, "r") as source:
         diode_values = np.asarray(source["/entry1/bsdiodes/data"][()], dtype=float)
-        if diode_values.ndim != 4 or diode_channel >= diode_values.shape[-1]:
-            raise ValueError(f"Unexpected diode shape {diode_values.shape}; channel {diode_channel} is unavailable.")
+        if diode_values.ndim != 4 or BSDIODES_CHANNEL >= diode_values.shape[-1]:
+            raise ValueError(
+                f"Unexpected diode shape {diode_values.shape}; channel {BSDIODES_CHANNEL} is unavailable."
+            )
         detector_shapes = {name: tuple(source[path].shape) for name, path in DETECTOR_DATASETS.items()}
         leading_shape = detector_shapes["SAXS"][:-2]
         if detector_shapes["WAXS"][:-2] != leading_shape or tuple(diode_values.shape[:2]) != leading_shape:
             raise ValueError(f"Incompatible I22 leading dimensions: detectors={detector_shapes}, diode={diode_values.shape}.")
 
-        samples = diode_values[..., diode_channel]
+        samples = diode_values[..., BSDIODES_CHANNEL]
         valid_count = np.sum(np.isfinite(samples), axis=-1).astype(np.int32)
         diode_mean = np.nanmean(samples, axis=-1)
         diode_std = np.nanstd(samples, axis=-1, ddof=1)
@@ -153,6 +173,8 @@ def preprocess_measurement(
             creator="I22 MoDaCor examples helper",
             source_file=relative_master,
             preprocessing_version=PREPROCESSING_VERSION,
+            preprocessing_signature=signature,
+            preprocessing_config_json=json.dumps(config, sort_keys=True),
         )
         normalization = target.require_group("/modacor/normalization")
         normalization.attrs.update(
@@ -160,7 +182,7 @@ def preprocess_measurement(
             frame_shape=leading_shape,
             bsdiodes_source="/entry1/bsdiodes/data",
             bsdiodes_reduction_axis=2,
-            bsdiodes_channel_index=diode_channel,
+            bsdiodes_channel_index=BSDIODES_CHANNEL,
         )
         calibration = target.require_group("/modacor/calibration")
         calibration.attrs["description"] = "Scalar calibration values used by the I22 MoDaCor pipelines."
@@ -186,7 +208,6 @@ def prepare_inputs(
     project_dir: str | Path,
     *,
     sample_glob: str = "i22-978???.nxs",
-    diode_channel: int = 1,
     absolute_intensity_factor: float = 3.8e-15,
     overwrite: bool = False,
 ) -> I22Inputs:
@@ -232,7 +253,6 @@ def prepare_inputs(
         source: preprocess_measurement(
             source,
             preprocessed_dir,
-            diode_channel=diode_channel,
             absolute_intensity_factor=absolute_intensity_factor,
             overwrite=overwrite,
         )
@@ -286,7 +306,9 @@ def sample_aligned_paths(detector: str) -> tuple[str, ...]:
     )
 
 
-def upload_sample_chunk(buffer: BufferClient, detector: str, source_path: str | Path, start: int, stop: int) -> None:
+def upload_sample_chunk(
+    buffer: SourceBufferClient, detector: str, source_path: str | Path, start: int, stop: int
+) -> None:
     """Upload one detector slice and its aligned normalization inputs."""
 
     selection = (slice(None), slice(start, stop), slice(None), slice(None))
@@ -309,6 +331,7 @@ def chunk_work_items(
     frame_count: int,
     chunk_size: int,
 ) -> tuple[ChunkWorkItem, ...]:
+    _validate_chunk_grid(measurements, frame_count=frame_count, chunk_size=chunk_size)
     return tuple(
         ChunkWorkItem(measurement_index, chunk_index, master, source, start, min(start + chunk_size, frame_count))
         for measurement_index, (master, source) in enumerate(measurements)
@@ -319,15 +342,86 @@ def chunk_work_items(
 def validate_chunk_sources(
     measurements: tuple[tuple[Path, Path], ...], detector: str, *, frame_count: int
 ) -> tuple[int, ...]:
+    if detector not in DETECTOR_DATASETS:
+        raise ValueError(f"Unknown detector {detector!r}; expected one of {tuple(DETECTOR_DATASETS)}.")
+    _validate_chunk_grid(measurements, frame_count=frame_count, chunk_size=1)
     shapes = []
     for _master, source_path in measurements:
         with h5py.File(source_path, "r") as source:
             shapes.append(tuple(source[DETECTOR_DATASETS[detector]].shape))
     if len(set(shapes)) != 1:
         raise ValueError(f"{detector} detector shapes differ: {shapes}.")
+    if len(shapes[0]) < 2:
+        raise ValueError(f"{detector} detector source must have at least two dimensions; got {shapes[0]}.")
     if frame_count > shapes[0][1]:
         raise ValueError(f"{detector} requested {frame_count} frames, but the source has {shapes[0][1]}.")
     return shapes[0]
+
+
+def _validate_chunk_grid(
+    measurements: tuple[tuple[Path, Path], ...], *, frame_count: int, chunk_size: int
+) -> None:
+    if not measurements:
+        raise ValueError("measurements must not be empty.")
+    if isinstance(frame_count, bool) or not isinstance(frame_count, int) or frame_count <= 0:
+        raise ValueError("frame_count must be a positive integer.")
+    if isinstance(chunk_size, bool) or not isinstance(chunk_size, int) or chunk_size <= 0:
+        raise ValueError("chunk_size must be a positive integer.")
+
+
+def _pilot_output_layout(
+    pilot_path: str | Path,
+    pilot_run_name: str,
+    *,
+    measurement_count: int,
+    chunks_per_measurement: int,
+) -> ChunkOutputLayout:
+    with h5py.File(pilot_path, "r") as pilot:
+        group = pilot[f"/processing/result/{pilot_run_name}/sample/signal"]
+        signal = group["signal"]
+        chunk_result_shape = tuple(signal.shape)
+        final_shape = (measurement_count, chunks_per_measurement, *chunk_result_shape)
+        arrays = [ChunkArrayLayout("signal", final_shape, signal.dtype.str)]
+        if "weights" in group:
+            weights = group["weights"]
+            if tuple(weights.shape) != chunk_result_shape:
+                raise ValueError(
+                    f"Pilot weights shape {weights.shape} does not match signal shape {chunk_result_shape}."
+                )
+            arrays.append(ChunkArrayLayout("weights", final_shape, weights.dtype.str))
+        elif float(group.attrs.get("weight_scalar", 1.0)) != 1.0:
+            weight = np.asarray(group.attrs["weight_scalar"])
+            arrays.append(ChunkArrayLayout("weights", (), weight.dtype.str, PlacementBinding(kind="static")))
+        if "uncertainties" in group:
+            for name, dataset in group["uncertainties"].items():
+                if tuple(dataset.shape) != chunk_result_shape:
+                    raise ValueError(
+                        f"Pilot uncertainty {name!r} shape {dataset.shape} does not match signal shape "
+                        f"{chunk_result_shape}."
+                    )
+                arrays.append(ChunkArrayLayout(f"uncertainties/{name}", final_shape, dataset.dtype.str))
+        axis_names = tuple(str(_decode(value)) for value in group.attrs.get("axes", ()))
+        for axis_name in dict.fromkeys(name for name in axis_names if name != "."):
+            axis = group[axis_name]
+            arrays.append(
+                ChunkArrayLayout(
+                    f"axes/{axis_name}",
+                    tuple(axis.shape),
+                    axis.dtype.str,
+                    PlacementBinding(kind="static"),
+                    units=str(_decode(axis.attrs["units"])),
+                    rank_of_data=int(axis.attrs["rank_of_data"]),
+                )
+            )
+        return ChunkOutputLayout(
+            output_id="sample_signal",
+            processing_path="/sample/signal",
+            destination_path="sample/signal",
+            units=str(_decode(signal.attrs["units"])),
+            rank_of_data=int(signal.attrs["rank_of_data"]),
+            arrays=tuple(arrays),
+            axis_names=(".", ".", *axis_names),
+        )
 
 
 def build_complete_plan(
@@ -345,47 +439,20 @@ def build_complete_plan(
 
     if source_mode not in {"buffer", "hdf", "tiled"}:
         raise ValueError("source_mode must be 'buffer', 'hdf', or 'tiled'.")
-    chunks_per_measurement = int(np.ceil(frame_count / chunk_size))
-    with h5py.File(pilot_path, "r") as pilot:
-        group = pilot[f"/processing/result/{pilot_run_name}/sample/signal"]
-        signal = group["signal"]
-        chunk_result_shape = tuple(signal.shape)
-        final_shape = (len(measurements), chunks_per_measurement, *chunk_result_shape)
-        arrays = [ChunkArrayLayout("signal", final_shape, signal.dtype.str)]
-        if "weights" in group:
-            weights = group["weights"]
-            arrays.append(ChunkArrayLayout("weights", final_shape, weights.dtype.str))
-        elif float(group.attrs.get("weight_scalar", 1.0)) != 1.0:
-            weight = np.asarray(group.attrs["weight_scalar"])
-            arrays.append(ChunkArrayLayout("weights", (), weight.dtype.str, PlacementBinding(kind="static")))
-        if "uncertainties" in group:
-            arrays.extend(
-                ChunkArrayLayout(f"uncertainties/{name}", final_shape, dataset.dtype.str)
-                for name, dataset in group["uncertainties"].items()
-            )
-        axis_names = tuple(str(_decode(value)) for value in group.attrs.get("axes", ()))
-        for axis_name in dict.fromkeys(name for name in axis_names if name != "."):
-            axis = group[axis_name]
-            arrays.append(
-                ChunkArrayLayout(
-                    f"axes/{axis_name}",
-                    tuple(axis.shape),
-                    axis.dtype.str,
-                    PlacementBinding(kind="static"),
-                    units=str(_decode(axis.attrs["units"])),
-                    rank_of_data=int(axis.attrs["rank_of_data"]),
-                )
-            )
-        output = ChunkOutputLayout(
-            output_id="sample_signal",
-            processing_path="/sample/signal",
-            destination_path="sample/signal",
-            units=str(_decode(signal.attrs["units"])),
-            rank_of_data=int(signal.attrs["rank_of_data"]),
-            arrays=tuple(arrays),
-            axis_names=(".", ".", *axis_names),
-        )
-
+    if detector not in DETECTOR_DATASETS:
+        raise ValueError(f"Unknown detector {detector!r}; expected one of {tuple(DETECTOR_DATASETS)}.")
+    _validate_chunk_grid(measurements, frame_count=frame_count, chunk_size=chunk_size)
+    if len(source_shape) < 2:
+        raise ValueError(f"source_shape must have at least two dimensions; got {source_shape}.")
+    if frame_count > source_shape[1]:
+        raise ValueError(f"Requested {frame_count} frames, but source_shape contains {source_shape[1]}.")
+    chunks_per_measurement = (frame_count + chunk_size - 1) // chunk_size
+    output = _pilot_output_layout(
+        pilot_path,
+        pilot_run_name,
+        measurement_count=len(measurements),
+        chunks_per_measurement=chunks_per_measurement,
+    )
     work = chunk_work_items(measurements, frame_count=frame_count, chunk_size=chunk_size)
     driver: dict[str, Any] = {
         "source_dataset": DETECTOR_DATASETS[detector],

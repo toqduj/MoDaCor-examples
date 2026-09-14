@@ -35,16 +35,44 @@ def _measurement_adapter(source_path: Path):
 class LocalI22TiledServer:
     """Expose selected HDF5 leaves through a loopback-only Tiled server."""
 
-    def __init__(self, source_paths, *, host: str = "127.0.0.1", port: int = 8910, startup_timeout: float = 45):
+    def __init__(
+        self,
+        source_paths,
+        *,
+        host: str = "127.0.0.1",
+        port: int = 8910,
+        startup_timeout: float = 45,
+        shutdown_timeout: float = 10,
+    ):
         self.source_paths = tuple(Path(path) for path in source_paths)
-        self.host = host
+        if not self.source_paths:
+            raise ValueError("source_paths must not be empty.")
+        if not 1 <= int(port) <= 65535:
+            raise ValueError("port must be between 1 and 65535.")
+        if startup_timeout <= 0 or shutdown_timeout <= 0:
+            raise ValueError("Tiled server timeouts must be positive.")
+        self.host = str(host)
         self.port = int(port)
         self.startup_timeout = float(startup_timeout)
-        self.url = f"http://{host}:{port}"
+        self.shutdown_timeout = float(shutdown_timeout)
+        self.url = f"http://{self.host}:{self.port}"
         self.server = None
         self.thread = None
 
+    @property
+    def running(self) -> bool:
+        return (
+            self.server is not None
+            and bool(getattr(self.server, "started", False))
+            and self.thread is not None
+            and self.thread.is_alive()
+        )
+
     def start(self) -> str:
+        if self.running:
+            return self.url
+        if self.server is not None or self.thread is not None:
+            self.stop()
         try:
             import uvicorn
             from tiled.adapters.mapping import MapAdapter
@@ -54,30 +82,45 @@ class LocalI22TiledServer:
         except ImportError as exc:
             raise RuntimeError("This notebook requires the MoDaCor tiled-tests extra.") from exc
 
-        samples = {path.stem: _measurement_adapter(path) for path in self.source_paths}
-        tree = MapAdapter({"samples": MapAdapter(samples)})
-        app = build_app(tree, authentication=Authentication(allow_anonymous_access=True))
-        self.server = uvicorn.Server(
-            uvicorn.Config(app, host=self.host, port=self.port, log_level="warning", access_log=False)
-        )
-        self.thread = Thread(target=self.server.run, name="i22-notebook-tiled", daemon=True)
-        self.thread.start()
-        deadline = monotonic() + self.startup_timeout
-        while monotonic() < deadline:
-            if self.server.started:
-                from_uri(self.url)
-                return self.url
-            if not self.thread.is_alive():
-                raise RuntimeError("The notebook-owned Tiled server exited during startup.")
-            sleep(0.25)
-        self.stop()
-        raise TimeoutError(f"Tiled did not start within {self.startup_timeout:g} seconds.")
+        try:
+            samples = {path.stem: _measurement_adapter(path) for path in self.source_paths}
+            tree = MapAdapter({"samples": MapAdapter(samples)})
+            app = build_app(tree, authentication=Authentication(allow_anonymous_access=True))
+            self.server = uvicorn.Server(
+                uvicorn.Config(app, host=self.host, port=self.port, log_level="warning", access_log=False)
+            )
+            self.thread = Thread(target=self.server.run, name="i22-notebook-tiled", daemon=True)
+            self.thread.start()
+            deadline = monotonic() + self.startup_timeout
+            last_connection_error = None
+            while monotonic() < deadline:
+                if not self.thread.is_alive():
+                    raise RuntimeError("The notebook-owned Tiled server exited during startup.")
+                if self.server.started:
+                    try:
+                        from_uri(self.url)
+                    except Exception as exc:  # The socket may lag briefly behind Uvicorn's flag.
+                        last_connection_error = exc
+                    else:
+                        return self.url
+                sleep(min(0.25, max(0.0, deadline - monotonic())))
+            message = f"Tiled did not start within {self.startup_timeout:g} seconds."
+            if last_connection_error is not None:
+                message += f" Last connection error: {last_connection_error}"
+            raise TimeoutError(message)
+        except Exception:
+            self.stop()
+            raise
 
     def stop(self) -> None:
-        if self.server is not None:
-            self.server.should_exit = True
-        if self.thread is not None:
-            self.thread.join(timeout=10)
+        server = self.server
+        thread = self.thread
+        if server is not None:
+            server.should_exit = True
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=self.shutdown_timeout)
+            if thread.is_alive():
+                raise TimeoutError(f"Tiled did not stop within {self.shutdown_timeout:g} seconds.")
         self.server = None
         self.thread = None
 
