@@ -29,8 +29,9 @@ DETECTOR_DATASETS = {
     "SAXS": "/entry1/detector/data",
     "WAXS": "/entry1/Pilatus2M_WAXS/data",
 }
-PREPROCESSING_VERSION = "2026-09-13-i22-normalization-v4"
+PREPROCESSING_VERSION = "2026-09-14-i22-transmission-v5"
 BSDIODES_CHANNEL = 1
+I0_CHANNEL = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class I22Inputs:
     calibration_files: dict[str, Path]
     mask_files: dict[str, Path]
     background_file: Path
+    transmission_reference_file: Path
     sample_files: tuple[Path, ...]
     preprocessed_samples: tuple[Path, ...]
     preprocessed_background: Path
@@ -94,12 +96,61 @@ def _write_dataset(group: h5py.Group, name: str, values: Any, *, units: str | No
     return dataset
 
 
-def _preprocessing_config(*, absolute_intensity_factor: float) -> dict[str, Any]:
+def _readout_statistics(
+    source: h5py.File,
+    path: str,
+    *,
+    channel: int,
+    leading_shape: tuple[int, ...] | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    values = np.asarray(source[path][()], dtype=float)
+    if values.ndim != 4 or channel >= values.shape[-1]:
+        raise ValueError(f"Unexpected readout shape {values.shape} at {path}; channel {channel} is unavailable.")
+    if leading_shape is not None and tuple(values.shape[:2]) != leading_shape:
+        raise ValueError(f"{path} leading dimensions {values.shape[:2]} do not match detector frames {leading_shape}.")
+
+    samples = values[..., channel]
+    valid = np.isfinite(samples)
+    valid_count = np.sum(valid, axis=-1).astype(np.int32)
+    total = np.sum(np.where(valid, samples, 0.0), axis=-1)
+    mean = np.divide(total, valid_count, out=np.full(total.shape, np.nan), where=valid_count > 0)
+    deviations = np.where(valid, samples - mean[..., None], 0.0)
+    variance = np.divide(
+        np.sum(deviations**2, axis=-1),
+        valid_count - 1,
+        out=np.full(total.shape, np.nan),
+        where=valid_count > 1,
+    )
+    std = np.sqrt(variance)
+    sem = np.divide(std, np.sqrt(valid_count), out=np.full(total.shape, np.nan), where=valid_count > 0)
+    return mean, std, sem, valid_count
+
+
+def _reference_readout_statistics(
+    source: h5py.File, path: str, *, channel: int
+) -> tuple[float, float, int]:
+    values = np.asarray(source[path][()], dtype=float)
+    if values.ndim != 4 or channel >= values.shape[-1]:
+        raise ValueError(f"Unexpected readout shape {values.shape} at {path}; channel {channel} is unavailable.")
+    samples = values[..., channel]
+    samples = samples[np.isfinite(samples)]
+    if samples.size < 2:
+        raise ValueError(f"{path} needs at least two finite channel-{channel} values for a reference SEM.")
+    mean = float(np.mean(samples))
+    sem = float(np.std(samples, ddof=1) / np.sqrt(samples.size))
+    return mean, sem, int(samples.size)
+
+
+def _preprocessing_config(
+    *, absolute_intensity_factor: float, transmission_reference_file: str
+) -> dict[str, Any]:
     if not np.isfinite(absolute_intensity_factor) or absolute_intensity_factor <= 0:
         raise ValueError("absolute_intensity_factor must be a positive finite number.")
     return {
         "version": PREPROCESSING_VERSION,
         "bsdiodes_channel": BSDIODES_CHANNEL,
+        "i0_channel": I0_CHANNEL,
+        "transmission_reference_file": transmission_reference_file,
         "absolute_intensity_factor": float(absolute_intensity_factor),
     }
 
@@ -123,6 +174,7 @@ def preprocess_measurement(
     master_file: str | Path,
     output_dir: str | Path,
     *,
+    transmission_reference_file: str | Path,
     absolute_intensity_factor: float = 3.8e-15,
     overwrite: bool = False,
 ) -> Path:
@@ -130,27 +182,50 @@ def preprocess_measurement(
 
     master_file = Path(master_file).resolve()
     output_file = Path(output_dir) / f"{master_file.stem}_modacor.nxs"
-    config = _preprocessing_config(absolute_intensity_factor=absolute_intensity_factor)
+    transmission_reference_file = Path(transmission_reference_file).resolve()
+    relative_reference = os.path.relpath(transmission_reference_file, start=output_file.parent)
+    config = _preprocessing_config(
+        absolute_intensity_factor=absolute_intensity_factor,
+        transmission_reference_file=relative_reference,
+    )
     signature = _preprocessing_signature(config)
     if not _needs_rewrite(output_file, overwrite=overwrite, expected_signature=signature):
         return output_file
 
+    with h5py.File(transmission_reference_file, "r") as reference:
+        reference_diode_mean, reference_diode_sem, reference_diode_count = _reference_readout_statistics(
+            reference, "/entry1/bsdiodes/data", channel=BSDIODES_CHANNEL
+        )
+        reference_i0_mean, reference_i0_sem, reference_i0_count = _reference_readout_statistics(
+            reference, "/entry1/I0/data", channel=I0_CHANNEL
+        )
+    if reference_diode_mean == 0.0 or reference_i0_mean == 0.0:
+        raise ValueError("The transmission-reference readout means must be non-zero.")
+    reference_ratio = reference_diode_mean / reference_i0_mean
+    reference_ratio_sem = abs(reference_ratio) * np.hypot(
+        reference_diode_sem / reference_diode_mean,
+        reference_i0_sem / reference_i0_mean,
+    )
+
     with h5py.File(master_file, "r") as source:
-        diode_values = np.asarray(source["/entry1/bsdiodes/data"][()], dtype=float)
-        if diode_values.ndim != 4 or BSDIODES_CHANNEL >= diode_values.shape[-1]:
-            raise ValueError(
-                f"Unexpected diode shape {diode_values.shape}; channel {BSDIODES_CHANNEL} is unavailable."
-            )
         detector_shapes = {name: tuple(source[path].shape) for name, path in DETECTOR_DATASETS.items()}
         leading_shape = detector_shapes["SAXS"][:-2]
-        if detector_shapes["WAXS"][:-2] != leading_shape or tuple(diode_values.shape[:2]) != leading_shape:
-            raise ValueError(f"Incompatible I22 leading dimensions: detectors={detector_shapes}, diode={diode_values.shape}.")
-
-        samples = diode_values[..., BSDIODES_CHANNEL]
-        valid_count = np.sum(np.isfinite(samples), axis=-1).astype(np.int32)
-        diode_mean = np.nanmean(samples, axis=-1)
-        diode_std = np.nanstd(samples, axis=-1, ddof=1)
-        diode_sem = diode_std / np.sqrt(valid_count)
+        if detector_shapes["WAXS"][:-2] != leading_shape:
+            raise ValueError(f"Incompatible I22 detector leading dimensions: {detector_shapes}.")
+        diode_mean, diode_std, diode_sem, diode_count = _readout_statistics(
+            source, "/entry1/bsdiodes/data", channel=BSDIODES_CHANNEL, leading_shape=leading_shape
+        )
+        i0_mean, i0_std, i0_sem, i0_count = _readout_statistics(
+            source, "/entry1/I0/data", channel=I0_CHANNEL, leading_shape=leading_shape
+        )
+        if np.any(diode_mean == 0.0) or np.any(i0_mean == 0.0):
+            raise ValueError("Measurement readout means must be non-zero when calculating transmission.")
+        transmission = (diode_mean / i0_mean) / reference_ratio
+        transmission_sem = np.abs(transmission) * np.sqrt(
+            (diode_sem / diode_mean) ** 2
+            + (i0_sem / i0_mean) ** 2
+            + (reference_ratio_sem / reference_ratio) ** 2
+        )
         count_times = {}
         for detector, path in {
             "SAXS": "/entry1/instrument/detector/count_time",
@@ -161,14 +236,26 @@ def preprocess_measurement(
                 _frame_array(dataset[()], leading_shape, name=path),
                 str(_decode(dataset.attrs.get("units", "s"))),
             )
-        transmission_path = "/entry1/I0/transmission"
-        transmission = _frame_array(source[transmission_path][()], leading_shape, name=transmission_path)
+        entry_attrs = dict(source["/entry1"].attrs)
+        entry_children = tuple(source["/entry1"].keys())
+        sample_attrs = dict(source["/entry1/sample"].attrs) if "/entry1/sample" in source else {}
+        sample_children = tuple(source["/entry1/sample"].keys()) if "/entry1/sample" in source else ()
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     temporary = output_file.with_suffix(output_file.suffix + ".tmp")
     with h5py.File(temporary, "w") as target:
         relative_master = os.path.relpath(master_file, start=output_file.parent)
-        target["entry1"] = h5py.ExternalLink(relative_master, "/entry1")
+        entry = target.create_group("entry1")
+        entry.attrs.update(entry_attrs)
+        for child in entry_children:
+            if child != "sample":
+                entry[child] = h5py.ExternalLink(relative_master, f"/entry1/{child}")
+        sample = entry.create_group("sample")
+        sample.attrs.update(sample_attrs)
+        sample.attrs.setdefault("NX_class", "NXsample")
+        for child in sample_children:
+            if child not in {"transmission", "transmission_sem"}:
+                sample[child] = h5py.ExternalLink(relative_master, f"/entry1/sample/{child}")
         target.attrs.update(
             creator="I22 MoDaCor examples helper",
             source_file=relative_master,
@@ -183,9 +270,13 @@ def preprocess_measurement(
             bsdiodes_source="/entry1/bsdiodes/data",
             bsdiodes_reduction_axis=2,
             bsdiodes_channel_index=BSDIODES_CHANNEL,
+            i0_source="/entry1/I0/data",
+            i0_reduction_axis=2,
+            i0_channel_index=I0_CHANNEL,
         )
         calibration = target.require_group("/modacor/calibration")
         calibration.attrs["description"] = "Scalar calibration values used by the I22 MoDaCor pipelines."
+        calibration.attrs["transmission_reference_file"] = relative_reference
         _write_dataset(
             calibration,
             "absolute_intensity_factor",
@@ -196,8 +287,33 @@ def preprocess_measurement(
         _write_dataset(normalization, "bsdiodes_channel_1_mean", _detector_divisor(diode_mean), units="dimensionless")
         _write_dataset(normalization, "bsdiodes_channel_1_std", _detector_divisor(diode_std), units="dimensionless")
         _write_dataset(normalization, "bsdiodes_channel_1_sem", _detector_divisor(diode_sem), units="dimensionless")
-        _write_dataset(normalization, "bsdiodes_channel_1_n_valid", _detector_divisor(valid_count))
-        _write_dataset(normalization, "transmission", _detector_divisor(transmission), units="dimensionless")
+        _write_dataset(normalization, "bsdiodes_channel_1_n_valid", _detector_divisor(diode_count))
+        _write_dataset(normalization, "i0_channel_1_mean", _detector_divisor(i0_mean), units="dimensionless")
+        _write_dataset(normalization, "i0_channel_1_std", _detector_divisor(i0_std), units="dimensionless")
+        _write_dataset(normalization, "i0_channel_1_sem", _detector_divisor(i0_sem), units="dimensionless")
+        _write_dataset(normalization, "i0_channel_1_n_valid", _detector_divisor(i0_count))
+        _write_dataset(
+            calibration,
+            "bsdiodes_to_i0_ratio",
+            reference_ratio,
+            units="dimensionless",
+            source=relative_reference,
+        )
+        _write_dataset(calibration, "bsdiodes_to_i0_ratio_sem", reference_ratio_sem, units="dimensionless")
+        _write_dataset(calibration, "reference_bsdiodes_mean", reference_diode_mean, units="dimensionless")
+        _write_dataset(calibration, "reference_bsdiodes_sem", reference_diode_sem, units="dimensionless")
+        _write_dataset(calibration, "reference_bsdiodes_n_valid", reference_diode_count)
+        _write_dataset(calibration, "reference_i0_mean", reference_i0_mean, units="dimensionless")
+        _write_dataset(calibration, "reference_i0_sem", reference_i0_sem, units="dimensionless")
+        _write_dataset(calibration, "reference_i0_n_valid", reference_i0_count)
+        _write_dataset(
+            sample,
+            "transmission",
+            _detector_divisor(transmission),
+            units="dimensionless",
+            long_name="Sample transmission derived from calibrated bsdiodes/I0 readouts",
+        )
+        _write_dataset(sample, "transmission_sem", _detector_divisor(transmission_sem), units="dimensionless")
         for detector, (values, units) in count_times.items():
             _write_dataset(normalization, f"{detector.lower()}_count_time", _detector_divisor(values), units=units)
     temporary.replace(output_file)
@@ -208,6 +324,7 @@ def prepare_inputs(
     project_dir: str | Path,
     *,
     sample_glob: str = "i22-978???.nxs",
+    transmission_reference_file: str | Path | None = None,
     absolute_intensity_factor: float = 3.8e-15,
     overwrite: bool = False,
 ) -> I22Inputs:
@@ -216,6 +333,12 @@ def prepare_inputs(
     project_dir = Path(project_dir).resolve()
     data_dir = project_dir / "data"
     background = data_dir / "i22-977723.nxs"
+    if transmission_reference_file is None:
+        transmission_reference = background
+    else:
+        transmission_reference = Path(transmission_reference_file)
+        if not transmission_reference.is_absolute():
+            transmission_reference = project_dir / transmission_reference
     pipelines = {
         detector: project_dir / "pipelines" / f"I22_{detector}_solids_operando.yaml"
         for detector in DETECTOR_DATASETS
@@ -225,7 +348,7 @@ def prepare_inputs(
         for detector in DETECTOR_DATASETS
     }
     masks = {detector: data_dir / "processing" / f"{detector}_mask.nxs" for detector in DETECTOR_DATASETS}
-    required = [background, *pipelines.values(), *calibrations.values(), *masks.values()]
+    required = [background, transmission_reference, *pipelines.values(), *calibrations.values(), *masks.values()]
     missing = [path for path in required if not path.is_file()]
     if missing:
         raise FileNotFoundError("Missing required I22 inputs: " + ", ".join(str(path) for path in missing))
@@ -235,7 +358,7 @@ def prepare_inputs(
             return False
         return all(
             (data_dir / f"{path.stem}-{suffix}.h5").is_file()
-            for suffix in ("Pilatus2M_SAXS", "Pilatus2M_WAXS", "bsdiodes")
+            for suffix in ("Pilatus2M_SAXS", "Pilatus2M_WAXS", "bsdiodes", "I0")
         )
 
     samples = tuple(sorted(path.resolve() for path in data_dir.glob(sample_glob) if sample_candidate(path)))
@@ -253,6 +376,7 @@ def prepare_inputs(
         source: preprocess_measurement(
             source,
             preprocessed_dir,
+            transmission_reference_file=transmission_reference,
             absolute_intensity_factor=absolute_intensity_factor,
             overwrite=overwrite,
         )
@@ -264,6 +388,7 @@ def prepare_inputs(
         calibration_files=calibrations,
         mask_files=masks,
         background_file=background.resolve(),
+        transmission_reference_file=transmission_reference.resolve(),
         sample_files=samples,
         preprocessed_samples=tuple(prepared[path] for path in samples),
         preprocessed_background=prepared[background.resolve()],
@@ -302,6 +427,8 @@ def sample_aligned_paths(detector: str) -> tuple[str, ...]:
         DETECTOR_DATASETS[detector],
         "/modacor/normalization/bsdiodes_channel_1_mean",
         "/modacor/normalization/bsdiodes_channel_1_std",
+        "/entry1/sample/transmission",
+        "/entry1/sample/transmission_sem",
         f"/modacor/normalization/{detector.lower()}_count_time",
     )
 
@@ -319,6 +446,8 @@ def upload_sample_chunk(
         buffer.put_array(scalar_path, source[scalar_path][()])
         for data_path in (
             "/modacor/normalization/bsdiodes_channel_1_mean",
+            "/entry1/sample/transmission",
+            "/entry1/sample/transmission_sem",
             f"/modacor/normalization/{detector.lower()}_count_time",
             scalar_path,
         ):

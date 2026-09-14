@@ -2,11 +2,11 @@ name: I22 WAXS solids operando
 description: >-
   First-pass I22 WAXS correction pipeline. The raw detector frames remain
   externally linked from compact notebook-preprocessed measurement files; the
-  preprocessor only reshapes frame-wise normalization arrays. Detector geometry
+  preprocessor only reshapes or summarizes frame-wise metadata. Detector geometry
   is resolved by MoDaCor directly from the NeXus calibration files. I22 flux
   and transmission normalization is handled through the beamstop diode; the
-  I0 transmission value is retained for future sample-absorption estimates and
-  is not divided out in this pipeline.
+  calibrated bsdiodes/I0 sample transmission and its SEM are retained below
+  /entry1/sample for absorption-aware corrections and are not divided out here.
 steps:
   PD_sample:
     module: AppendProcessingData
@@ -294,8 +294,8 @@ steps:
     configuration:
       # Operational correction: recover the intensity incident on the WAXS
       # attenuator by dividing by the angle-dependent Al transmission. Do not
-      # also divide by /modacor/normalization/transmission here: in these I22
-      # files that scalar is consistent with the WAXS Al plate transmission.
+      # also divide by /entry1/sample/transmission here: sample transmission
+      # belongs in an absorption-aware correction, not the attenuator correction.
       # The DAWN cross-check pipeline uses apply_as=multiply to reproduce
       # DAWN's recorded behavior, but that is not the physical correction.
       with_processing_keys: [sample]

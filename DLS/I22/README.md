@@ -9,6 +9,9 @@ empty-cell background and detector-specific calibration and mask files.
 - Sample masters: `i22-978003.nxs`, `i22-978008.nxs`, `i22-978013.nxs`, and
   `i22-978018.nxs`.
 - Empty-cell background master: `i22-977723.nxs`.
+- Unobstructed-beam transmission reference: `i22-977723.nxs` for this data set.
+  It is configured separately from the background in each notebook so another
+  reference can be used, for example when the background is an empty capillary.
 - Detector, I0, beamstop-diode, and user-tetramm HDF5 sidecars for each master.
 - SAXS/WAXS calibration and mask files in `data/processing/`.
 - Recommended physical-correction pipelines:
@@ -49,8 +52,14 @@ the work tree remains movable with this example. The Tiled notebook requires
 the `tiled-tests` MoDaCor extra.
 
 Preprocessing only reshapes or summarizes incompatible frame-wise metadata.
-MoDaCor resolves detector geometry and corrections from the original NeXus
-metadata and the packaged calibration files.
+It averages channel 1 of both `bsdiodes` and `I0`, including their standard
+errors on the mean. The unobstructed-beam measurement supplies the scalar
+calibration ratio `mean(bsdiodes) / mean(I0)`. Frame-wise sample transmission
+is `(bsdiodes / I0) / calibration_ratio`; its propagated SEM includes both
+sample readouts and both reference readouts. The results are written to
+`/entry1/sample/transmission` and `/entry1/sample/transmission_sem` in each
+preprocessed file. MoDaCor resolves detector geometry and corrections from the
+original NeXus metadata and the packaged calibration files.
 
 ## Current validation status
 
