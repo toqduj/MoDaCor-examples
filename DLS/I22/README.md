@@ -68,7 +68,7 @@ of the integrating count-time correction.
 
 ## Current validation status
 
-Using MoDaCor 1.7.0, all four pipelines prepare successfully. The shared helper
+Using MoDaCor 1.8.0, all four pipelines prepare successfully. The shared helper
 discovers exactly four packaged samples, validates matching `(1679, 1475)`
 calibration/mask shapes, and preprocesses the samples/background with working
 relative HDF5 links. Complete SAXS and WAXS pipeline equivalence and the full

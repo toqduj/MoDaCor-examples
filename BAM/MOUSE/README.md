@@ -42,7 +42,7 @@ referenced background has the same configuration number.
 
 ## Current validation status
 
-Using MoDaCor 1.7.0, repository validation passes, all ten sample/background
+Using MoDaCor 1.8.0, repository validation passes, all ten sample/background
 pairs resolve to matching configurations, and the 42-step pipeline prepares.
 The complete ten-file runtime-server loop still needs to be rerun during the
 release freeze, when its runtime and output inventory will be recorded.

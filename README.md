@@ -53,7 +53,7 @@ license. See [LICENSING.md](LICENSING.md) for precedence and declaration rules.
 
 ## Development environment
 
-The current development baseline is MoDaCor 1.7.0. The final Zenodo release
+The current development baseline is MoDaCor 1.8.0. The final Zenodo release
 will record an immutable MoDaCor tag or commit after every included example has
 been rerun against it. MoDaCor requires Python 3.12 or newer.
 
