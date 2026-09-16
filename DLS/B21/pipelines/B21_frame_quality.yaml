@@ -1,0 +1,44 @@
+# Apply only after all coarse curves for one complete B21 measurement have
+# been assembled. The q thresholds and factors are provisional settings that
+# must be reviewed against representative batch and SEC-SAXS measurements.
+name: B21 complete-measurement frame quality
+description: >-
+  Load the assembled frame-wise coarse I(q) curves for one B21 measurement and
+  assign the B21 bitfield quality flags. This compact second pass selects its
+  high-q maximum and low-q minimum references globally over the complete run,
+  so its result is independent of raw-detector chunk boundaries.
+steps:
+  PD_prefilter_signal:
+    module: AppendProcessingData
+    short_title: Load assembled B21 coarse curves
+    requires_steps: []
+    configuration:
+      processing_key: prefilter
+      databundle_output_key: signal
+      signal_location: curves::/processing/result/measurement/prefilter/signal/signal
+      units_override: count
+      rank_of_data: 1
+
+  PD_prefilter_q:
+    module: AppendProcessingData
+    short_title: Load assembled B21 q coordinates
+    requires_steps: []
+    configuration:
+      processing_key: prefilter
+      databundle_output_key: Q
+      signal_location: curves::/processing/result/measurement/prefilter/Q/signal
+      units_override: 1/angstrom
+      rank_of_data: 1
+
+  B21_quality:
+    module: B21FrameQualityFilter
+    short_title: Assign complete-measurement B21 frame flags
+    requires_steps: [PD_prefilter_signal, PD_prefilter_q]
+    configuration:
+      with_processing_keys: [prefilter]
+      low_q_max: 0.02
+      high_q_min: 0.15
+      q_limits_unit: 1/angstrom
+      high_q_min_fraction: 0.95
+      low_q_max_factor: 1.05
+      flags_key: frame_quality_flags

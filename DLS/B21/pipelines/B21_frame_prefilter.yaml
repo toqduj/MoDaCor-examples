@@ -1,0 +1,141 @@
+# The q range is imported from the supplied DAWN pipeline. The 50-bin coarse
+# integration and the two assessment boundaries are provisional B21 settings
+# pending review against both batch-mode and SEC-SAXS measurements.
+name: B21 frame pre-filter integration
+description: >-
+  Chunk-safe first pass of the non-destructive B21 frame-quality pre-filter. The
+  main sample DataBundle keeps its raw detector stack. A lightweight prefilter
+  branch shares that stack and the fixed detector geometry, then performs a
+  masked 50-bin frame-wise azimuthal integration. B21FrameQualityFilter must be
+  applied once to the assembled curves for one complete measurement; applying
+  its batch-relative references independently inside raw-data chunks would be
+  incorrect. No frame averaging or background subtraction occurs here.
+steps:
+  PD_sample:
+    module: AppendProcessingData
+    short_title: Load B21 detector frames
+    requires_steps: []
+    configuration:
+      processing_key: sample
+      databundle_output_key: signal
+      signal_location: sample::/entry1/instrument/detector/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_signal:
+    module: AppendProcessingData
+    short_title: Load B21 calibration image shape
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: signal
+      signal_location: calibration::/entry1/calibration_data/data
+      units_override: count
+      rank_of_data: 2
+
+  PD_static_mask:
+    module: AppendProcessingData
+    short_title: Load B21 instrument mask
+    requires_steps: []
+    configuration:
+      processing_key: static
+      databundle_output_key: instrument_mask
+      signal_location: mask::/entry/mask/mask
+      units_override: dimensionless
+      rank_of_data: 2
+
+  PC_static:
+    module: PixelCoordinates3D
+    short_title: Resolve fixed B21 detector coordinates
+    requires_steps: [PD_static_signal]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+
+  GX_static:
+    module: XSGeometryFromPixelCoordinates
+    short_title: Resolve fixed B21 scattering geometry
+    requires_steps: [PC_static]
+    configuration:
+      with_processing_keys: [static]
+      detector_frame:
+        type: nexus
+        source: calibration
+        detector_path: /entry1/instrument/detector
+        module_origin: first_pixel_center
+      sample_z_override:
+        value: 0.0
+        units: mm
+      wavelength_source: calibration::/entry1/calibration_sample/beam/incident_wavelength
+      wavelength_units_source: calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+
+  IP_static:
+    module: IndexPixels
+    short_title: Build coarse B21 q bins
+    requires_steps: [GX_static]
+    configuration:
+      averaging_direction: azimuthal
+      q_min: 0.0045
+      q_max: 0.34
+      q_limits_unit: 1/angstrom
+      bin_type: log
+      psi_min: -180.0
+      psi_max: 180.0
+      psi_limits_unit: degree
+      n_bins: 50
+      with_processing_keys: [static]
+
+  CP_static_sample:
+    module: CopyDataBundleKeys
+    short_title: Attach fixed B21 mask and geometry
+    requires_steps: [PD_sample, PD_static_mask, IP_static]
+    configuration:
+      with_processing_keys: [sample, static]
+      data_keys: [instrument_mask, Q, Psi, pixel_index]
+      copy: false
+
+  TM_sample_invalid:
+    module: ThresholdMask
+    short_title: Mask Eiger invalid-value sentinels per frame
+    requires_steps: [CP_static_sample]
+    configuration:
+      with_processing_keys: [sample]
+      source_basedata_key: signal
+      target_mask_key: mask
+      lower_bound: 0
+      upper_bound: 4294967293
+      mask_mode: outside
+
+  BM_sample_mask:
+    module: BitwiseOrMasks
+    short_title: Combine dynamic and fixed B21 masks
+    requires_steps: [TM_sample_invalid]
+    configuration:
+      with_processing_keys: [sample]
+      target_mask_key: mask
+      source_mask_keys: [instrument_mask]
+
+  CP_prefilter_branch:
+    module: CopyDataBundleKeys
+    short_title: Create non-destructive prefilter branch
+    requires_steps: [BM_sample_mask]
+    configuration:
+      with_processing_keys: [prefilter, sample]
+      data_keys: [signal, mask, Q, Psi, pixel_index]
+      copy: false
+
+  AV_prefilter:
+    module: FramewiseIndexedAverager
+    short_title: Coarse frame-wise azimuthal integration
+    requires_steps: [CP_prefilter_branch]
+    configuration:
+      with_processing_keys: [prefilter]
+      averaging_direction: azimuthal
+      use_signal_weights: false
+      use_signal_uncertainty_weights: false
+      uncertainty_weight_key: null
+      stats_keys: []
