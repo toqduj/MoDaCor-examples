@@ -9,6 +9,7 @@ __pycache__/
 *.py[cod]
 .venv/
 **/.venv/
+# Generated processing outputs, including supplementary poster artefacts.
 work/
 **/work/
 modacor_output/
@@ -23,3 +24,4 @@ modacor_preprocessed/
 
 # Locally built release artifacts.
 dist/
+DLS/I22/DLS-I22-data.zip

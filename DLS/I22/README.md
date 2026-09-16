@@ -45,7 +45,7 @@ a short index so existing links lead to these notebooks. Shared discovery,
 preprocessing, registrations, and explicit I22 plan construction live in
 `i22_helpers.py`; the local Tiled lifecycle lives in `i22_tiled.py`.
 
-All four notebooks write compact MoDaCor-facing files below
+The processing notebooks write compact MoDaCor-facing files below
 `work/preprocessed/`. Ordinary results go below `work/output/`; chunked results
 go below `work/chunk_server/`. Generated preprocessing links are relative, so
 the work tree remains movable with this example. The Tiled notebook requires
@@ -104,6 +104,32 @@ SAXS and WAXS are processed sequentially and their sessions are deleted between
 runs so the two background working sets do not coexist. A background that does
 not fit requires a separate mergeable weighted-reduction workflow or an
 explicit frame-pairing policy; averaging chunk means blindly is not sufficient.
+
+## Supplementary poster visualizations and testing
+
+The supplementary performance material under `supplementary/poster_2026/` is
+retained to reproduce poster graphics and exploratory timing measurements. It
+is not part of the main I22 correction example or its normal validation path.
+`supplementary/poster_2026/I22_performance_benchmark.ipynb` compares
+fresh-session server processing, sample-only partial reruns, and direct-slice
+chunked-HDF throughput; its shared implementation is in the adjacent
+`i22_performance.py`.
+
+The benchmark uses the numerical form of the recommended pipelines: all
+corrections and azimuthal integration are retained, while interactive plots and
+intermediate 2D file sinks are removed. Preprocessing, server startup, session
+construction, and the chunk-schema pilot are outside the reported timings. On
+2026-09-15, an Apple M1 Max with 64 GiB RAM running Python 3.14.5 and MoDaCor
+1.8.0 gave median end-to-end times of 29.2 s (full) and 9.24 s (sample rerun)
+for SAXS, and 25.2 s and 6.14 s for WAXS. Forty direct-HDF ten-frame chunks per
+detector gave median throughputs of 8.59 SAXS frames/s and 8.97 WAXS frames/s,
+including chunk publication.
+
+The notebook writes raw observations, per-step durations, machine metadata, and
+PNG/SVG/PDF plots below
+`work/supplementary/poster_2026/performance/`. This regenerable output tree is
+ignored by Git. The processing date and MoDaCor version are also recorded in
+the notebook so later benchmark runs can be distinguished from these results.
 
 ## Provisional values and release gates
 
