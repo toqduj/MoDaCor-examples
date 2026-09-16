@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "instrument": "BAM/SAXSess_I",
+  "data_version": "development",
+  "data_license": {
+    "spdx_id": "CC-BY-4.0",
+    "name": "Creative Commons Attribution 4.0 International",
+    "declaration": "DATA_LICENSE.json",
+    "license_file": "DATA_LICENSE.txt",
+    "license_sha256": "5ef4bb8b84fc671e4d57bba44f1dd6153cd819a07bb836120b8bedb34f206916",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+    "attribution": "Please cite the version-specific Zenodo record for the BAM SAXSess-I N008 example data, retain the creator and DOI metadata supplied there, and indicate whether changes were made."
+  },
+  "zenodo": {
+    "record_id": null,
+    "doi": null,
+    "concept_doi": null
+  },
+  "archive": {
+    "filename": "BAM-SAXSess_I-data.zip",
+    "url": null,
+    "size_bytes": null,
+    "sha256": null
+  },
+  "files": [
+    {
+      "path": "data/20260608_N008/S00628.tif",
+      "size_bytes": 90008,
+      "sha256": "f9d1723d6107c9b55759ab1eca83549091665fe2a0ab6169fe44c222f3fcc8b1"
+    },
+    {
+      "path": "data/20260608_N008/S00629.tif",
+      "size_bytes": 45008,
+      "sha256": "00ea41f29d75d3d71dc217069daf6a680a7a3c71086caf5df50ed6f3742f20d8"
+    },
+    {
+      "path": "data/20260608_N008/S00630.tif",
+      "size_bytes": 45008,
+      "sha256": "0b6bdf845dceb33d82f7252340e8002dcd4a7dfc9d8114b21aecfe5e8b45bcfc"
+    },
+    {
+      "path": "data/20260608_N008/S00631.tif",
+      "size_bytes": 90008,
+      "sha256": "35135edadd95e63f7f5c513f259cb9a892a6fabbd9f60763a48b3e235e62d864"
+    },
+    {
+      "path": "data/20260608_N008/S00632.tif",
+      "size_bytes": 90008,
+      "sha256": "e7eb28eeefe3397d985f7acae92a3a35ff92a9332582ee63f64a6aa270d2d7d3"
+    },
+    {
+      "path": "data/20260608_N008/S00633.tif",
+      "size_bytes": 45008,
+      "sha256": "38a4aab8e7e29558bfed04e164b8639f9164bda6c5d7070415bf718d9075906f"
+    },
+    {
+      "path": "data/20260608_N008/S00635.tif",
+      "size_bytes": 90008,
+      "sha256": "1e01bb7fac1a9f6be71592c2e41d1ea1165be6f65315eec1ac528c9d020819e2"
+    },
+    {
+      "path": "data/20260608_N008/S00636.tif",
+      "size_bytes": 45008,
+      "sha256": "29417171e72e59808531188126679e3f062f9d01b15d4f285591ff02cf3374a0"
+    },
+    {
+      "path": "data/20260608_N008/S00637.tif",
+      "size_bytes": 90008,
+      "sha256": "3e9ebf8ba7cf6cdcafc334560cf17d5ec5f451f7666dab7b47ee5fbaedae29a9"
+    },
+    {
+      "path": "data/20260608_N008/S00638.tif",
+      "size_bytes": 90008,
+      "sha256": "615d712d3a810f1fabf318b853c06352b3bb23f781a9c6257be1a47277495a58"
+    },
+    {
+      "path": "data/20260608_N008/S00639.tif",
+      "size_bytes": 90008,
+      "sha256": "6a93b582b0f0ff36aee2862b98ffbfd39b91c9a67cb078192508883b15408261"
+    },
+    {
+      "path": "data/20260608_N008/S00640.tif",
+      "size_bytes": 90008,
+      "sha256": "dc954dad742b9bb1b82b85071cc51954e7236b23bd48dff6043649cb4f495610"
+    },
+    {
+      "path": "data/20260608_N008/S00641.tif",
+      "size_bytes": 90008,
+      "sha256": "001ffbc2aa97ba00f4080658ee0943c6e35456690dd18d643c93c6f64645507b"
+    },
+    {
+      "path": "data/20260608_N008/metadata_N008.xlsx",
+      "size_bytes": 16202,
+      "sha256": "818504325411d48413c60a3406e93fb7e727c1140ff8f8c2bace6b18bedb6bbf"
+    },
+    {
+      "path": "data/calibration/water_cal_reference.pdh",
+      "size_bytes": 32592,
+      "sha256": "d345ef300fa0a9a60f678a36eb078223e51193d921ea47ed4fa0a2d9eca73238"
+    }
+  ]
+}
