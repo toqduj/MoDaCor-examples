@@ -29,6 +29,10 @@ DETECTOR_DATASETS = {
     "SAXS": "/entry1/detector/data",
     "WAXS": "/entry1/Pilatus2M_WAXS/data",
 }
+WAXS_PIPELINES = {
+    "usaxs_saxs_waxs": "I22_WAXS_solids_operando_usaxs_saxs_waxs.yaml",
+    "standard_saxs_waxs": "I22_WAXS_solids_operando_standard_saxs_waxs.yaml",
+}
 PREPROCESSING_VERSION = "2026-09-14-i22-transmission-v5"
 BSDIODES_CHANNEL = 1
 I0_CHANNEL = 1
@@ -37,6 +41,7 @@ I0_CHANNEL = 1
 @dataclass(frozen=True, slots=True)
 class I22Inputs:
     project_dir: Path
+    beamline_configuration: str
     pipeline_paths: dict[str, Path]
     calibration_files: dict[str, Path]
     mask_files: dict[str, Path]
@@ -324,6 +329,7 @@ def prepare_inputs(
     project_dir: str | Path,
     *,
     sample_glob: str = "i22-978???.nxs",
+    beamline_configuration: str = "usaxs_saxs_waxs",
     transmission_reference_file: str | Path | None = None,
     absolute_intensity_factor: float = 3.8e-15,
     overwrite: bool = False,
@@ -331,6 +337,9 @@ def prepare_inputs(
     """Discover, validate, and minimally preprocess the packaged I22 inputs."""
 
     project_dir = Path(project_dir).resolve()
+    if beamline_configuration not in WAXS_PIPELINES:
+        choices = ", ".join(sorted(WAXS_PIPELINES))
+        raise ValueError(f"Unknown I22 beamline configuration {beamline_configuration!r}; choose from {choices}.")
     data_dir = project_dir / "data"
     background = data_dir / "i22-977723.nxs"
     if transmission_reference_file is None:
@@ -340,8 +349,8 @@ def prepare_inputs(
         if not transmission_reference.is_absolute():
             transmission_reference = project_dir / transmission_reference
     pipelines = {
-        detector: project_dir / "pipelines" / f"I22_{detector}_solids_operando.yaml"
-        for detector in DETECTOR_DATASETS
+        "SAXS": project_dir / "pipelines" / "I22_SAXS_solids_operando.yaml",
+        "WAXS": project_dir / "pipelines" / WAXS_PIPELINES[beamline_configuration],
     }
     calibrations = {
         detector: data_dir / "processing" / f"{detector}_calibration.nxs"
@@ -384,6 +393,7 @@ def prepare_inputs(
     }
     return I22Inputs(
         project_dir=project_dir,
+        beamline_configuration=beamline_configuration,
         pipeline_paths=pipelines,
         calibration_files=calibrations,
         mask_files=masks,

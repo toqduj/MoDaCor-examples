@@ -9,7 +9,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from i22_helpers import preprocess_measurement, sample_aligned_paths
+from i22_helpers import WAXS_PIPELINES, preprocess_measurement, sample_aligned_paths
 
 
 def _write_measurement(
@@ -128,9 +128,14 @@ def test_reference_file_changes_invalidate_cached_preprocessing(tmp_path: Path) 
 
 def test_operational_pipelines_normalize_time_before_transmission_and_flux() -> None:
     project_dir = Path(__file__).resolve().parents[1]
-    for detector in ("SAXS", "WAXS"):
+    pipeline_files = {
+        "SAXS": "I22_SAXS_solids_operando.yaml",
+        **{f"WAXS_{profile}": filename for profile, filename in WAXS_PIPELINES.items()},
+    }
+    for detector_profile, filename in pipeline_files.items():
+        detector = detector_profile.split("_", maxsplit=1)[0]
         pipeline = yaml.safe_load(
-            (project_dir / "pipelines" / f"I22_{detector}_solids_operando.yaml").read_text()
+            (project_dir / "pipelines" / filename).read_text()
         )
         steps = pipeline["steps"]
         assert not any(step_id.startswith("BS_") for step_id in steps)
@@ -160,3 +165,22 @@ def test_operational_pipelines_normalize_time_before_transmission_and_flux() -> 
         assert "/modacor/normalization/i0_channel_1_mean" in aligned
         assert "/modacor/normalization/i0_channel_1_sem" in aligned
         assert "/modacor/normalization/bsdiodes_channel_1_mean" not in aligned
+
+
+def test_waxs_nosecone_profiles_select_aluminium_correction() -> None:
+    project_dir = Path(__file__).resolve().parents[1]
+    pipelines = {
+        profile: yaml.safe_load((project_dir / "pipelines" / filename).read_text())
+        for profile, filename in WAXS_PIPELINES.items()
+    }
+
+    usaxs_steps = pipelines["usaxs_saxs_waxs"]["steps"]
+    assert "AL" not in usaxs_steps
+    assert usaxs_steps["PO"]["requires_steps"] == ["DE"]
+
+    standard_steps = pipelines["standard_saxs_waxs"]["steps"]
+    assert standard_steps["AL"]["module"] == "AttenuatorPlateCorrection"
+    assert standard_steps["AL"]["configuration"]["thickness"] == 0.1
+    assert standard_steps["AL"]["configuration"]["thickness_units"] == "cm"
+    assert standard_steps["AL"]["configuration"]["apply_as"] == "divide"
+    assert standard_steps["PO"]["requires_steps"] == ["AL"]

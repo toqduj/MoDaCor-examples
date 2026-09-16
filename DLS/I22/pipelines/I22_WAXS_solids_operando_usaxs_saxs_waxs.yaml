@@ -1,9 +1,10 @@
-name: I22 WAXS solids operando
+name: I22 WAXS solids operando - USAXS/SAXS/WAXS nosecone
 description: >-
-  First-pass I22 WAXS correction pipeline. The raw detector frames remain
-  externally linked from compact notebook-preprocessed measurement files; the
-  preprocessor only reshapes or summarizes frame-wise metadata. Detector geometry
-  is resolved by MoDaCor directly from the NeXus calibration files. After
+  I22 WAXS correction pipeline for the combined USAXS/SAXS/WAXS beamline
+  configuration. This special nosecone has no aluminium attenuator. The raw
+  detector frames remain externally linked from compact notebook-preprocessed
+  measurement files; the preprocessor only reshapes or summarizes frame-wise
+  metadata. Detector geometry is resolved by MoDaCor directly from the NeXus calibration files. After
   count-time normalization, the signal is divided by the calibrated sample
   transmission and the incident I0 flux; both readouts are non-integrating.
 steps:
@@ -308,32 +309,29 @@ steps:
       wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
       normalize_to_normal_incidence: true
 
-  AL:
-    module: AttenuatorPlateCorrection
-    short_title: WAXS aluminium attenuator correction
-    requires_steps: [DE]
-    configuration:
-      # Operational correction: recover the intensity incident on the WAXS
-      # attenuator by dividing by the angle-dependent Al transmission. Do not
-      # fold sample transmission into this operation: TR_sample has already
-      # applied it independently of the attenuator correction.
-      # The DAWN cross-check pipeline uses apply_as=multiply to reproduce
-      # DAWN's recorded behavior, but that is not the physical correction.
-      with_processing_keys: [sample]
-      material: Al
-      density: 2.699
-      density_units: g/cm^3
-      thickness: 0.1
-      thickness_units: cm
-      wavelength_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
-      wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
-      normalize_to_normal_incidence: false
-      apply_as: divide
+  # The 1 mm aluminium attenuator used by the standard SAXS/WAXS nosecone was
+  # confirmed absent from this USAXS/SAXS/WAXS configuration. Keep the
+  # operation below as a documented reference, but do not enable it here.
+  # AL:
+  #   module: AttenuatorPlateCorrection
+  #   short_title: WAXS aluminium attenuator correction
+  #   requires_steps: [DE]
+  #   configuration:
+  #     with_processing_keys: [sample]
+  #     material: Al
+  #     density: 2.699
+  #     density_units: g/cm^3
+  #     thickness: 0.1
+  #     thickness_units: cm
+  #     wavelength_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength
+  #     wavelength_units_source: waxs_calibration::/entry1/calibration_sample/beam/incident_wavelength@units
+  #     normalize_to_normal_incidence: false
+  #     apply_as: divide
 
   PO:
     module: PolarizationCorrection
     short_title: WAXS polarization correction
-    requires_steps: [AL]
+    requires_steps: [DE]
     configuration:
       with_processing_keys: [sample]
       mode: linear_fraction

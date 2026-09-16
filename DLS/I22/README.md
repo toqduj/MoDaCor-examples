@@ -14,9 +14,12 @@ empty-cell background and detector-specific calibration and mask files.
   reference can be used, for example when the background is an empty capillary.
 - Detector, I0, beamstop-diode, and user-tetramm HDF5 sidecars for each master.
 - SAXS/WAXS calibration and mask files in `data/processing/`.
-- Recommended physical-correction pipelines:
-  `pipelines/I22_SAXS_solids_operando.yaml` and
-  `pipelines/I22_WAXS_solids_operando.yaml`.
+- Recommended physical-correction pipelines: the common
+  `pipelines/I22_SAXS_solids_operando.yaml` plus one WAXS nosecone profile:
+  `pipelines/I22_WAXS_solids_operando_usaxs_saxs_waxs.yaml` for the combined
+  USAXS/SAXS/WAXS configuration without an aluminium attenuator, or
+  `pipelines/I22_WAXS_solids_operando_standard_saxs_waxs.yaml` for the standard
+  SAXS/WAXS configuration with the 1 mm aluminium attenuator.
 - Test-only DAWN comparison pipelines:
   `pipelines/I22_SAXS_DAWN_crosscheck.yaml` and
   `pipelines/I22_WAXS_DAWN_crosscheck.yaml`.
@@ -44,6 +47,9 @@ The old `I22_solids_server_operando_preprocessed.ipynb` filename is retained as
 a short index so existing links lead to these notebooks. Shared discovery,
 preprocessing, registrations, and explicit I22 plan construction live in
 `i22_helpers.py`; the local Tiled lifecycle lives in `i22_tiled.py`.
+The packaged measurements used the special USAXS/SAXS/WAXS nosecone, so the
+notebooks set `BEAMLINE_CONFIGURATION = "usaxs_saxs_waxs"`. Change it to
+`"standard_saxs_waxs"` only for measurements made with the standard nosecone.
 
 The processing notebooks write compact MoDaCor-facing files below
 `work/preprocessed/`. Ordinary results go below `work/output/`; chunked results
@@ -68,7 +74,7 @@ of the integrating count-time correction.
 
 ## Current validation status
 
-Using MoDaCor 1.8.0, all four pipelines prepare successfully. The shared helper
+Using MoDaCor 1.8.0, all packaged pipelines prepare successfully. The shared helper
 discovers exactly four packaged samples, validates matching `(1679, 1475)`
 calibration/mask shapes, and preprocesses the samples/background with working
 relative HDF5 links. Complete SAXS and WAXS pipeline equivalence and the full
@@ -138,6 +144,8 @@ the notebook so later benchmark runs can be distinguished from these results.
   output metadata and next to the relevant DAWN pipeline operations.
 - The DAWN cross-check pipelines reproduce selected recorded behaviour and are
   not the recommended physical-correction pipelines.
+- Separate glassy-carbon calibration branches are planned; neither operational
+  nosecone pipeline currently applies that calibration measurement.
 - The NeXus metadata include a proposal identifier, facility username, and an
   email-like title value. Permission and retention/sanitization must be
   resolved before public release.
