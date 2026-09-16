@@ -17,7 +17,8 @@ steps:
       databundle_output_key: signal
       signal_location: sample::/entry1/instrument/detector00/data
       units_location: sample::/entry1/instrument/detector00/data@units
-      uncertainties_sources: {'poisson': 'sample::/entry1/instrument/detector00/data_uncertainties_poisson'}
+      uncertainties_sources:
+        poisson: sample::/entry1/instrument/detector00/data_uncertainties_poisson
       rank_of_data: 2
 
   PD_sample_static_signal:
@@ -55,6 +56,17 @@ steps:
       # has no units or uncertainties
       rank_of_data: 2
 
+  PD_sample_static_flatfield:
+    module: AppendProcessingData
+    short_title: "Add detector flatfield to static PD"
+    requires_steps: []
+    configuration:
+      processing_key: sample_static
+      databundle_output_key: flatfield
+      signal_location: sample_static::/entry1/instrument/detector00/detectorSpecific/flatfield
+      units_override: dimensionless
+      rank_of_data: 2
+
   PD_background:
     module: AppendProcessingData
     short_title: "Add bgnd data to PD"
@@ -64,26 +76,54 @@ steps:
       databundle_output_key: signal
       signal_location: background::/entry1/instrument/detector00/data
       units_location: background::/entry1/instrument/detector00/data@units
-      uncertainties_sources: {'poisson': 'background::/entry1/instrument/detector00/data_uncertainties_poisson'}
+      uncertainties_sources:
+        poisson: background::/entry1/instrument/detector00/data_uncertainties_poisson
+        SEM: background::/entry1/instrument/detector00/data_uncertainties_sem
       rank_of_data: 2
 
   # -----------------------
   # Data reduction steps for sample
   # -----------------------
 
+  # Keep detector-only masking on this independent static branch. A new sample
+  # therefore invalidates only the later attachment/merge, not these steps.
+  MK_flatfield_static:
+    module: ThresholdMask
+    short_title: "Mask pixels with excessive flatfield"
+    requires_steps: [PD_sample_static_flatfield]
+    configuration:
+      with_processing_keys: [sample_static]
+      source_basedata_key: flatfield
+      target_mask_key: flatfield_mask
+      lower_bound: 0.96
+      upper_bound: 1.04
+      mask_mode: outside
+
   MK_merge_static:
     module: BitwiseOrMasks
-    short_title: "Combine pixel and BS masks"
-    requires_steps: [PD_sample_static_mask, PD_sample_static_bs_mask]
+    short_title: "Combine pixel, flatfield and beamstop masks"
+    requires_steps: [PD_sample_static_mask, PD_sample_static_bs_mask, MK_flatfield_static]
     configuration:
       with_processing_keys: [sample_static]
       target_mask_key: mask
-      source_mask_keys: [bs_mask]
-  
+      source_mask_keys: [bs_mask, flatfield_mask]
+
+  MK_threshold:
+    module: ThresholdMask
+    short_title: "Sample raw-count validity mask"
+    requires_steps: [PD_sample]
+    configuration:
+      with_processing_keys: [sample]
+      source_basedata_key: signal
+      target_mask_key: threshold_mask
+      lower_bound: 0.0
+      upper_bound: 1000000.0
+      mask_mode: outside
+
   TI:
     module: Divide
     short_title: "Time normalization"
-    requires_steps: [PD_sample]
+    requires_steps: [MK_threshold]
     configuration:
       divisor_source: sample::/entry1/instrument/detector00/count_time
       divisor_uncertainties_sources:
@@ -102,10 +142,18 @@ steps:
       subtrahend_units_source: sample_static::/entry1/instrument/detector00/darkcurrent@units
       with_processing_keys: [sample]
 
+  FF:
+    module: Multiply
+    short_title: "Apply detector flatfield correction"
+    requires_steps: [DC]
+    configuration:
+      multiplier_source: sample_static::/entry1/instrument/detector00/detectorSpecific/flatfield
+      with_processing_keys: [sample]
+
   FL:
     module: Divide
     short_title: "Flux normalization"
-    requires_steps: [DC]
+    requires_steps: [FF]
     configuration:
       divisor_source: sample::/entry1/sample/beam/flux
       # divisor_uncertainties_sources:
@@ -135,6 +183,9 @@ steps:
       reduction: mean
       with_processing_keys: [sample]
 
+  # Operando sample files have one leading acquisition axis, unlike the
+  # two-axis stacked background files. A second sample reduction would consume
+  # a detector axis and is intentionally omitted.
   # FA2:
   #   module: ReduceDimensionality
   #   short_title: "Second frame averaging"
@@ -150,10 +201,22 @@ steps:
   # -----------------------
   # Data reduction steps for background
   # -----------------------
+  MK_threshold_bg:
+    module: ThresholdMask
+    short_title: "Background raw-count validity mask"
+    requires_steps: [PD_background]
+    configuration:
+      with_processing_keys: [background]
+      source_basedata_key: signal
+      target_mask_key: threshold_mask_bg
+      lower_bound: 0.0
+      upper_bound: 1000000.0
+      mask_mode: outside
+
   TI_bg:
     module: Divide
     short_title: "Time normalization"
-    requires_steps: [PD_background]
+    requires_steps: [MK_threshold_bg]
     configuration:
       divisor_source: background::/entry1/instrument/detector00/count_time
       divisor_uncertainties_sources:
@@ -172,10 +235,18 @@ steps:
       subtrahend_units_source: background::/entry1/instrument/detector00/darkcurrent@units
       with_processing_keys: [background]
 
+  FF_bg:
+    module: Multiply
+    short_title: "Apply background detector flatfield correction"
+    requires_steps: [DC_bg]
+    configuration:
+      multiplier_source: background::/entry1/instrument/detector00/detectorSpecific/flatfield
+      with_processing_keys: [background]
+
   FL_bg:
     module: Divide
     short_title: "Flux normalization"
-    requires_steps: [DC_bg]
+    requires_steps: [FF_bg]
     configuration:
       divisor_source: background::/entry1/sample/beam/flux
       # divisor_uncertainties_sources:
@@ -216,6 +287,28 @@ steps:
       reduction: mean
       with_processing_keys: [background]
 
+  MK_reduce_bg:
+    module: ReduceMask
+    short_title: "Collapse background raw-count mask"
+    requires_steps: [FA2_bg]
+    configuration:
+      with_processing_keys: [background]
+      source_mask_key: threshold_mask_bg
+      target_mask_key: threshold_mask_bg
+      axes: [0, 1]
+      reduction: any
+
+  MK_reduce:
+    module: ReduceMask
+    short_title: "Collapse sample raw-count mask"
+    requires_steps: [FA]
+    configuration:
+      with_processing_keys: [sample]
+      source_mask_key: threshold_mask
+      target_mask_key: threshold_mask
+      axes: 0
+      reduction: any
+
 
   # -----------------------
   # Background subtraction
@@ -223,7 +316,7 @@ steps:
   BG:
     module: SubtractDatabundles
     short_title: "Background subtraction"
-    requires_steps: [FA, FA2_bg]
+    requires_steps: [MK_reduce, MK_reduce_bg]
     configuration: 
       with_processing_keys:
         - sample
@@ -327,8 +420,48 @@ steps:
     requires_steps: [IP_static, BG]
     configuration:
       with_processing_keys: [sample, sample_static]  # target, source
-      data_keys: [mask, Q, Psi, Omega, pixel_index]
+      data_keys: [Q, Psi, TwoTheta, CosAlpha, Omega, pixel_index]
       copy: false
+
+  # The following dynamic merge mutates its target mask in place. Copy this
+  # relatively small map so raw-count flags never leak back into sample_static.
+  CP_static_sample_mask:
+    module: CopyDataBundleKeys
+    short_title: "Copy static mask to sample"
+    requires_steps: [IP_static, BG]
+    configuration:
+      with_processing_keys: [sample, sample_static]
+      data_keys: [mask]
+      copy: true
+
+  CP_threshold_mask_bg:
+    module: CopyDataBundleKeys
+    short_title: "Attach background threshold mask to sample"
+    requires_steps: [BG]
+    configuration:
+      with_processing_keys: [sample, background]
+      data_keys: [threshold_mask_bg]
+      copy: false
+
+  MK_merge_dynamic:
+    module: BitwiseOrMasks
+    short_title: "Combine static and raw-count masks"
+    requires_steps: [CP_static_sample_maps, CP_static_sample_mask, CP_threshold_mask_bg]
+    configuration:
+      with_processing_keys: [sample]
+      target_mask_key: mask
+      source_mask_keys: [threshold_mask, threshold_mask_bg]
+
+  MK_instrument_dilate:
+    module: DilateMask
+    short_title: "Dilate combined MOUSE mask"
+    requires_steps: [MK_merge_dynamic]
+    configuration:
+      with_processing_keys: [sample]
+      source_mask_key: mask
+      target_mask_key: mask
+      radius: 1
+      footprint_shape: square
 
   # -----------------------
   # Solid-angle normalization
@@ -336,9 +469,52 @@ steps:
   SP:
     module: SolidAngleCorrection
     short_title: "Solid angle correction"
-    requires_steps: [CP_static_sample_maps]
+    requires_steps: [MK_instrument_dilate]
     configuration: 
       with_processing_keys: [sample]
+
+  # -----------------------
+  # Detector efficiency correction
+  # -----------------------
+  DE:
+    module: DetectorEfficiencyCorrection
+    short_title: "MOUSE detector efficiency correction"
+    requires_steps: [SP]
+    configuration:
+      with_processing_keys: [sample]
+      material_source: sample_static::/entry1/instrument/detector00/sensor_material
+      density: 2.33
+      density_units: g/cm^3
+      thickness_source: sample_static::/entry1/instrument/detector00/sensor_thickness
+      thickness_units_source: sample_static::/entry1/instrument/detector00/sensor_thickness@units
+      wavelength_source: sample_static::/entry1/sample/beam/incident_wavelength
+      wavelength_units_source: sample_static::/entry1/sample/beam/incident_wavelength@units
+      normalize_to_normal_incidence: true
+
+  # -----------------------
+  # Polarization correction for an unpolarized laboratory source
+  # -----------------------
+  PO:
+    module: PolarizationCorrection
+    short_title: "MOUSE polarization correction"
+    requires_steps: [DE]
+    configuration:
+      with_processing_keys: [sample]
+      mode: linear_fraction
+      polarization_factor: 0.5
+      polarization_angular_offset: 0.0
+      polarization_angular_offset_units: degree
+
+  SA:
+    module: FlatPlateSelfAbsorptionCorrection
+    short_title: "Flat-plate sample self-absorption correction"
+    requires_steps: [PO]
+    configuration:
+      with_processing_keys: [sample]
+      transmission_source: sample::/entry1/sample/transmission_averaged/mean
+      transmission_units_source: sample::/entry1/sample/transmission_averaged/mean@units
+      transmission_uncertainties_sources:
+        self_absorption_transmission_SEM: sample::/entry1/sample/transmission_averaged/sem
 
   # -----------------------
   # Thickness normalization
@@ -347,23 +523,32 @@ steps:
   TH: 
     module: Divide
     short_title: "Thickness normalization"
-    requires_steps: [SP]
+    requires_steps: [SA]
     configuration:
-      divisor_source: sample::/entry1/sample/thickness
+      divisor_source: sample::/entry1/sample/thickness_averaged/mean
       divisor_uncertainties_sources:
-        propagate_to_all: sample::/entry1/instrument/detector00/detector_readout_time  # again, terrible placeholder uncertainty, but I don't have thickness uncertainties in the data yet
-      divisor_units_source: sample::/entry1/sample/thickness@units
+        thickness_SEM: sample::/entry1/sample/thickness_averaged/sem
+      divisor_units_source: sample::/entry1/sample/thickness_averaged/mean@units
       with_processing_keys: [sample]
 
   # -----------------------
   # averaging
   # -----------------------
 
+  PL_2D:
+    module: Plot2DVisualization
+    short_title: "Live MOUSE corrected 2D image"
+    requires_steps: [TH]
+    configuration:
+      target: plots::mouse-2d
+      data_path: /sample/signal/signal
+      title: "MOUSE corrected detector image"
+      colormap: Viridis
 
   AV:
     module: IndexedAverager
     short_title: "Azimuthal averaging"
-    requires_steps: [TH]
+    requires_steps: [PL_2D]
     configuration: 
       averaging_direction: azimuthal
       use_signal_weights: true
@@ -394,6 +579,22 @@ steps:
         uncertainty_combined: ["SEM", 'detector_position_jitter', 'sample_position_jitter', 'wavelength_jitter', 'pixel_index_slow', 'pixel_pitch_jitter', 'pixel_index_fast']
       drop_source_keys: false
       ignore_missing: true
+
+  PL_IQ:
+    module: Plot1DVisualization
+    short_title: "Live MOUSE I(Q) plot"
+    requires_steps: [CU, CUQ]
+    configuration:
+      target: plots::mouse-1d
+      x_path: /sample/Q/signal
+      y_path: /sample/signal/signal
+      x_units: 1/nm
+      xerr_uncertainty_names: [uncertainty_combined, SEM, STD]
+      yerr_uncertainty_names: [uncertainty_pixelvalues, SEM, STD, poisson]
+      error_bar_thickness: 2.0
+      error_bar_opacity: 0.65
+      error_bar_width: 3
+      title: "MOUSE corrected I(Q)"
 
   # DO:  # data output
   #   module: SinkProcessingData
