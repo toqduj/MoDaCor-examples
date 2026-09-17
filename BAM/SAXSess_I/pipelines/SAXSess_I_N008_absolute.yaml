@@ -1,0 +1,704 @@
+name: saxsess_i_n008_absolute
+# Recommended physical-correction pipeline for the liquid N008 reference set.
+# It produces Q in 1/nm and absolute intensity in 1/(m sr). The supplied
+# water-reference PDH is a legacy SAXSQuant calibration profile: 1.641 1/(m sr)
+# with a stated 1% uncertainty. Its exact provenance remains a release gate and
+# is documented in the adjacent README.
+steps:
+
+  # -----------------------
+  # Data sources
+  # -----------------------
+  # Sources are registered externally via the runtime API (PUT /v1/sessions/{id}/sources).
+  # Required source refs: sample, sample_background, intensity_calibration,
+  # intensity_calibration_background (all HDF), defaults (YAML), and
+  # i_cal_reference (the water-reference PDH read as CSV).
+
+  # -----------------------
+  # Initial data loading into processing data
+  # -----------------------
+  PD_sample:
+    module: AppendProcessingData
+    short_title: "Add sample measurement to PD"
+    requires_steps: []
+    configuration: &pd_hdf2d_common
+      rank_of_data: 2
+      databundle_output_key: signal
+      uncertainties_sources: {}
+      processing_key: sample
+      signal_location: sample::entry/instrument/detector/data
+      units_location: sample::entry/instrument/detector/data@units
+
+  PD_sample_background:
+    module: AppendProcessingData
+    short_title: "Add sample background meas. to PD"
+    requires_steps: []
+    configuration:
+      <<: *pd_hdf2d_common
+      processing_key: sample_background
+      signal_location: sample_background::entry/instrument/detector/data
+      units_location: sample_background::entry/instrument/detector/data@units
+
+  PD_intensity_calibration:
+    module: AppendProcessingData
+    short_title: "Add int. cal. meas. to PD"
+    requires_steps: []
+    configuration:
+      <<: *pd_hdf2d_common
+      processing_key: intensity_calibration
+      signal_location: intensity_calibration::entry/instrument/detector/data
+      units_location: intensity_calibration::entry/instrument/detector/data@units
+
+  PD_intensity_calibration_background:
+    module: AppendProcessingData
+    short_title: "Add int. cal. bgnd meas. to PD"
+    requires_steps: []
+    configuration:
+      <<: *pd_hdf2d_common
+      processing_key: intensity_calibration_background
+      signal_location: intensity_calibration_background::entry/instrument/detector/data
+      units_location: intensity_calibration_background::entry/instrument/detector/data@units
+
+  PD_intensity_calibration_reference_I:
+    module: AppendProcessingData
+    short_title: "Add int. cal. ref. I to PD"
+    requires_steps: []
+    configuration: &pd_gc_ref_common
+      processing_key: intensity_calibration_reference
+      rank_of_data: 1
+      databundle_output_key: signal
+      signal_location: i_cal_reference::I
+      units_override: "1/(m sr)"
+      uncertainties_sources:
+        apply_to_all: i_cal_reference::I_sigma
+
+  PD_intensity_calibration_reference_Q:
+    module: AppendProcessingData
+    short_title: "Add int. cal. ref. Q to PD"
+    requires_steps: [PD_intensity_calibration_reference_I]
+    configuration:
+      <<: *pd_gc_ref_common
+      databundle_output_key: Q
+      signal_location: i_cal_reference::Q
+      units_override: "1/nm"
+      uncertainties_sources: {}
+
+  # -----------------------
+  # Background subtraction
+  # -----------------------
+  BG:
+    module: SubtractDatabundles
+    short_title: "Background subtraction"
+    requires_steps: [FA, FA_bg]
+    configuration: &bg_subtract_common
+      with_processing_keys:
+        - sample
+        - sample_background
+
+  BG_i:
+    module: SubtractDatabundles
+    short_title: "Bgnd subtraction for int. cal."
+    requires_steps: [FA_i, FA_i_bg]
+    configuration:
+      <<: *bg_subtract_common
+      with_processing_keys:
+        - intensity_calibration
+        - intensity_calibration_background
+
+  # -----------------------
+  # Geometry (shared defaults-driven parts via anchor)
+  # -----------------------
+
+  PC:
+    module: PixelCoordinates3D
+    short_title: "Calc. pixel coordinates in lab frame"
+    requires_steps: [BG]
+    configuration:
+      with_processing_keys: [sample]
+
+      # --- detector plane intersection along beam (z) ---
+      det_coord_z_source: "sample::/entry/instrument/detector/transformations/det_z"
+      det_coord_z_units_source: "sample::/entry/instrument/detector/transformations/det_z@units"
+      det_coord_z_uncertainties_sources:
+        propagate_to_all: "sample::/entry/instrument/detector/transformations/det_z_uncertainty"
+
+      det_coord_x_source: "sample::/entry/instrument/detector/transformations/det_x"
+      det_coord_x_units_source: "sample::/entry/instrument/detector/transformations/det_x@units"
+      det_coord_x_uncertainties_sources:
+        propagate_to_all: "sample::/entry/instrument/detector/transformations/det_x_uncertainty"
+
+      det_coord_y_source: "sample::/entry/instrument/detector/transformations/det_y"
+      det_coord_y_units_source: "sample::/entry/instrument/detector/transformations/det_y@units"
+      det_coord_y_uncertainties_sources:
+        propagate_to_all: "sample::/entry/instrument/detector/transformations/det_y_uncertainty"
+
+      # --- pixel pitch (slow/fast) ---
+      # Units should be length, e.g. mm
+      pixel_pitch_fast_source: "sample::/entry/instrument/detector/x_pixel_size"
+      pixel_pitch_fast_units_source: "sample::/entry/instrument/detector/x_pixel_size@units"
+      pixel_pitch_slow_source: "sample::/entry/instrument/detector/y_pixel_size"
+      pixel_pitch_slow_units_source: "sample::/entry/instrument/detector/y_pixel_size@units"
+
+      # --- basis vectors (defaults shown) ---
+      # These are unit direction vectors in lab-frame NeXus axes.
+      basis_fast:   [1.0, 0.0, 0.0]
+      basis_slow:   [0.0, 1.0, 0.0]
+      basis_normal: [0.0, 0.0, -1.0]
+
+  GX:
+    module: XSGeometryFromPixelCoordinates
+    short_title: "XS geometry from pixel coords"
+    requires_steps: [PC]
+    configuration:
+      with_processing_keys:
+        - sample
+
+      # # sample position along beam (scalar length) = 0 for SAXSess
+      sample_z_source: sample::/entry/sample/transformations/sample_z
+      sample_z_units_source: sample::/entry/sample/transformations/sample_z@units
+      sample_z_uncertainties_sources:
+        propagate_to_all: sample::/entry/sample/transformations/sample_z_uncertainty
+
+      # wavelength (scalar length)
+      wavelength_source: sample::/entry/sample/beam/incident_wavelength
+      wavelength_units_source: sample::/entry/sample/beam/incident_wavelength@units
+      wavelength_uncertainties_sources:
+        propagate_to_all: sample::/entry/sample/beam/incident_wavelength_uncertainty
+      # pixel pitch (length) for Omega
+      pixel_pitch_fast_source: "sample::/entry/instrument/detector/x_pixel_size"
+      pixel_pitch_fast_units_source: "sample::/entry/instrument/detector/x_pixel_size@units"
+      pixel_pitch_slow_source: "sample::/entry/instrument/detector/y_pixel_size"
+      pixel_pitch_slow_units_source: "sample::/entry/instrument/detector/y_pixel_size@units"
+
+      # optional: detector normal in lab frame (unit vector)
+      detector_normal: [0.0, 0.0, 1.0]
+
+  PC_i:
+    module: PixelCoordinates3D
+    short_title: "Pixel coords for int. cal."
+    requires_steps: [BG_i]
+    configuration:
+      with_processing_keys: [intensity_calibration]
+
+      # --- detector plane intersection along beam (z) ---
+      det_coord_z_source: "intensity_calibration::/entry/instrument/detector/transformations/det_z"
+      det_coord_z_units_source: "intensity_calibration::/entry/instrument/detector/transformations/det_z@units"
+      det_coord_z_uncertainties_sources:
+        propagate_to_all: "intensity_calibration::/entry/instrument/detector/transformations/det_z_uncertainty"
+
+      det_coord_x_source: "intensity_calibration::/entry/instrument/detector/transformations/det_x"
+      det_coord_x_units_source: "intensity_calibration::/entry/instrument/detector/transformations/det_x@units"
+      det_coord_x_uncertainties_sources:
+        propagate_to_all: "intensity_calibration::/entry/instrument/detector/transformations/det_x_uncertainty"
+
+      det_coord_y_source: "intensity_calibration::/entry/instrument/detector/transformations/det_y"
+      det_coord_y_units_source: "intensity_calibration::/entry/instrument/detector/transformations/det_y@units"
+      det_coord_y_uncertainties_sources:
+        propagate_to_all: "intensity_calibration::/entry/instrument/detector/transformations/det_y_uncertainty"
+
+      # --- pixel pitch (slow/fast) ---
+      # Units should be length, e.g. mm
+      pixel_pitch_fast_source: "intensity_calibration::/entry/instrument/detector/x_pixel_size"
+      pixel_pitch_fast_units_source: "intensity_calibration::/entry/instrument/detector/x_pixel_size@units"
+      pixel_pitch_slow_source: "intensity_calibration::/entry/instrument/detector/y_pixel_size"
+      pixel_pitch_slow_units_source: "intensity_calibration::/entry/instrument/detector/y_pixel_size@units"
+
+      # --- basis vectors (defaults shown) ---
+      # These are unit direction vectors in lab-frame NeXus axes.
+      basis_fast:   [1.0, 0.0, 0.0]
+      basis_slow:   [0.0, 1.0, 0.0]
+      basis_normal: [0.0, 0.0, 1.0]
+
+  GX_i:
+    module: XSGeometryFromPixelCoordinates
+    short_title: "XS geometry for int. cal."
+    requires_steps: [PC_i]
+    configuration:
+      with_processing_keys:
+        - intensity_calibration
+
+      # # sample position along beam (scalar length) = 0 for SAXSess
+      sample_z_source: intensity_calibration::/entry/sample/transformations/sample_z
+      sample_z_units_source: intensity_calibration::/entry/sample/transformations/sample_z@units
+      sample_z_uncertainties_sources:
+        propagate_to_all: intensity_calibration::/entry/sample/transformations/sample_z_uncertainty
+
+      # wavelength (scalar length)
+      wavelength_source: intensity_calibration::/entry/sample/beam/incident_wavelength
+      wavelength_units_source: intensity_calibration::/entry/sample/beam/incident_wavelength@units
+      wavelength_uncertainties_sources:
+        propagate_to_all: intensity_calibration::/entry/sample/beam/incident_wavelength_uncertainty
+      # pixel pitch (length) for Omega
+      pixel_pitch_fast_source: "intensity_calibration::/entry/instrument/detector/x_pixel_size"
+      pixel_pitch_fast_units_source: "intensity_calibration::/entry/instrument/detector/x_pixel_size@units"
+      pixel_pitch_slow_source: "intensity_calibration::/entry/instrument/detector/y_pixel_size"
+      pixel_pitch_slow_units_source: "intensity_calibration::/entry/instrument/detector/y_pixel_size@units"
+
+      # optional: detector normal in lab frame (unit vector)
+      detector_normal: [0.0, 0.0, 1.0]
+
+
+  # -----------------------
+  # Solid-angle normalization
+  # -----------------------
+  SP:
+    module: SolidAngleCorrection
+    short_title: "Solid angle correction"
+    requires_steps: [GX]
+    configuration: &solid_angle_common
+      with_processing_keys: [sample]
+
+  SP_i:
+    module: SolidAngleCorrection
+    short_title: "Solid angle corr. for int. cal."
+    requires_steps: [GX_i]
+    configuration:
+      <<: *solid_angle_common
+      with_processing_keys: [intensity_calibration]
+
+  # -----------------------
+  # Thickness normalization
+  # -----------------------
+
+  TH: 
+    module: Divide
+    short_title: "Thickness normalization"
+    requires_steps: [SP]
+    configuration:
+      divisor_source: sample::entry/sample/thickness_averaged/mean
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::entry/sample/thickness_averaged/mean_uncertainty
+      divisor_units_source: sample::entry/sample/thickness_averaged/mean@units
+      with_processing_keys: [sample]
+
+  TH_i: 
+    module: Divide
+    short_title: "Thickness norm. for int. cal."
+    requires_steps: [SP_i]
+    configuration:
+      divisor_source: intensity_calibration::entry/sample/thickness_averaged/mean
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration::entry/sample/thickness_averaged/mean_uncertainty
+      divisor_units_source: intensity_calibration::entry/sample/thickness_averaged/mean@units
+      with_processing_keys: [intensity_calibration]
+
+  # -----------------------
+  # Precalculation for azimuthal averaging
+  # -----------------------
+  IP:
+    module: IndexPixels
+    short_title: "Pixel indexing for averaging"
+    requires_steps: [AU]
+    configuration: &index_az_common
+      averaging_direction: azimuthal
+      q_min: 0.1
+      q_max: 6.0
+      q_limits_unit: nm^-1
+      bin_type: log
+      psi_min: 0.0   # positive half only for SAXSess data, i.e. not below the direct beam
+      psi_max: 180.0
+      psi_limits_unit: degrees
+      n_bins: 100
+      with_processing_keys: [sample]
+
+  AV:
+    module: IndexedAverager
+    short_title: "Azimuthal averaging"
+    requires_steps: [IP]
+    configuration: &avg_az_common
+      averaging_direction: azimuthal
+      use_signal_weights: true
+      use_signal_uncertainty_weights: false
+      uncertainty_weight_key: null
+      with_processing_keys: [sample]
+
+  CU:  # combine uncertainties
+    module: CombineUncertainties
+    short_title: "Combine geometry uncertainties"
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: signal
+      combinations:
+        uncertainty_solidangle: ["pixel_index_slow", "pixel_index_fast"]
+      drop_source_keys: false
+      ignore_missing: false
+
+  CU2:  # max uncertainties combination for poisson and SEM
+    module: CombineUncertaintiesMax
+    short_title: "Max of poisson and STD unc."
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: signal
+      combinations:
+        uncertainty_intensity: ["poisson", "STD"]
+      drop_source_keys: false
+      ignore_missing: true
+
+  CU12: 
+    module: CombineUncertaintiesMax
+    short_title: "Combine geom. and int. unc."
+    requires_steps: [CU, CU2]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: signal
+      combinations:
+        uncertainty_total: ["uncertainty_solidangle", "uncertainty_intensity"]
+      drop_source_keys: false
+      ignore_missing: true
+
+  CUQ: # combine uncertainties for the Q vector
+    module: CombineUncertainties
+    short_title: "Combine Q uncertainties"
+    requires_steps: [AV]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: Q
+      combinations:
+        uncertainty_combined: ["pixel_index_slow", "pixel_index_fast"]
+      drop_source_keys: false
+      ignore_missing: false
+
+  CUQ2: # combine uncertainties for the Q vector
+    module: CombineUncertainties
+    short_title: "Max of Q pixel unc and STD"
+    requires_steps: [CUQ]
+    configuration:
+      with_processing_keys: [sample]
+      target_basedata_key: Q
+      combinations:
+        uncertainty_combined: ["uncertainty_combined", "STD"]
+      drop_source_keys: false
+      ignore_missing: false
+
+  # -----------------------
+  # Sink the final data into a CSV file for external use
+  # -----------------------
+
+  DO:  # data output
+    module: SinkProcessingData
+    short_title: "Export to CSV"
+    requires_steps: [CU12, CUQ2]
+    configuration:
+      target: "export_csv::"
+      data_paths:
+        - /sample/Q/signal
+        - /sample/Q/uncertainties/uncertainty_combined
+        - /sample/signal/signal
+        - /sample/signal/uncertainties/uncertainty_total
+
+  IP_i:
+    module: IndexPixels
+    short_title: "Pixel indexing for int. cal. averaging"
+    requires_steps: [TH_i]
+    configuration:
+      <<: *index_az_common
+      with_processing_keys: [intensity_calibration]
+
+  AV_i:
+    module: IndexedAverager
+    short_title: "Azim. avg. for int. cal."
+    requires_steps: [IP_i]
+    configuration:
+      <<: *avg_az_common
+      with_processing_keys: [intensity_calibration]
+
+  # --- Find intensity calibration scaling factor (measured vs reference) ---
+  SF_i:
+    module: FindScaleFactor1D
+    short_title: "Calc int. cal. scale factor"
+    requires_steps: [AV_i, PD_intensity_calibration_reference_Q]
+    configuration:
+      with_processing_keys:
+        - intensity_calibration              # working (measured) curve
+        - intensity_calibration_reference    # supplied water reference curve
+      signal_key: signal
+      independent_axis_key: Q
+      # where to store results (in the *working* DataBundle):
+      scale_output_key: intensity_scale_factor
+      background_output_key: intensity_scale_background
+      # fit controls:
+      fit_background: false
+      fit_min_val: 2           # nm^-1 (Q range start): 2-4 matches water settings in saxsquant
+      fit_max_val: 4           # nm^-1 (Q range end)
+      fit_val_units: nm^-1
+      require_overlap: true
+      interpolation_kind: linear
+      # robust least squares:
+      robust_loss: huber
+      robust_fscale: 1.0
+      # include BaseData.weights if present:
+      use_basedata_weights: true
+
+  SF_i_units:
+    module: UnitsLabelUpdate
+    short_title: "Set units of int. cal. scale factor"
+    requires_steps: [SF_i]
+    configuration:
+      with_processing_keys:
+        - intensity_calibration
+      update_pairs:
+        intensity_scale_factor:
+          units: "arbitrary_flux_units/counts"
+
+  AU:
+    module: MultiplyDatabundles
+    short_title: "Apply int. cal. scale factor"
+    requires_steps: [TH, SF_i_units]
+    configuration:
+      with_processing_keys:
+        - sample
+        - intensity_calibration
+      multiplier_data_key: intensity_scale_factor
+
+  # -----------------------
+  # Shared anchors for repeated configs in the pipelines below
+  # -----------------------
+  # darkcurrent subtraction is identical everywhere (only with_processing_keys differs)
+  DC_bg:
+    module: Subtract
+    short_title: "Subtract darkcurrent"
+    requires_steps: [TI_bg]
+    configuration: &subtract_darkcurrent_common
+      subtrahend_source: defaults::detector/darkcurrent/value
+      subtrahend_uncertainties_sources:
+        propagate_to_all: defaults::detector/darkcurrent/uncertainty
+      subtrahend_units_source: defaults::detector/darkcurrent/units
+      with_processing_keys: [sample_background]
+
+  # ReduceDimensionality is identical everywhere (only with_processing_keys differs)
+  FA_bg:
+    module: ReduceDimensionality
+    short_title: "Reduce dimensionality (mean)"
+    requires_steps: [TR_bg]
+    configuration: &reduce_axis0_mean_common
+      axes: 0
+      use_weights: true
+      nan_policy: propagate
+      reduction: mean
+      with_processing_keys: [sample_background]
+
+  # -----------------------
+  # Background pipeline
+  # -----------------------
+  PU_bg:
+    module: PoissonUncertainties
+    short_title: "Calculate Poisson uncertainties"
+    requires_steps: [PD_sample_background]
+    configuration:
+      with_processing_keys: [sample_background]
+
+  TI_bg:
+    module: Divide
+    short_title: "Normalize by frame exposure time"
+    requires_steps: [PU_bg]
+    configuration:
+      divisor_source: sample_background::entry/instrument/detector/frame_exposure_time
+      divisor_uncertainties_sources:
+        propagate_to_all: sample_background::entry/instrument/detector/frame_exposure_time_uncertainty
+      divisor_units_source: sample_background::entry/instrument/detector/frame_exposure_time@units
+      with_processing_keys: [sample_background]
+
+  # DC_bg defined above (anchor source)
+
+  FL_bg:
+    module: Divide
+    short_title: "Normalize by relative flux"
+    requires_steps: [DC_bg]
+    configuration:
+      divisor_source: sample_background::entry/sample/beam/relative_flux
+      divisor_uncertainties_sources:
+        propagate_to_all: sample_background::entry/sample/beam/relative_flux_uncertainty
+      divisor_units_source: sample_background::entry/sample/beam/relative_flux@units
+      with_processing_keys: [sample_background]
+
+  TR_bg:
+    module: Divide
+    short_title: "Normalize by transmission"
+    requires_steps: [FL_bg]
+    configuration:
+      divisor_source: sample_background::entry/sample/transmission
+      divisor_uncertainties_sources:
+        propagate_to_all: sample_background::entry/sample/transmission_uncertainty
+      divisor_units_source: sample_background::entry/sample/transmission@units
+      with_processing_keys: [sample_background]
+
+  # FA_bg defined above (anchor source)
+
+  # -----------------------
+  # Sample pipeline
+  # -----------------------
+  PU:
+    module: PoissonUncertainties
+    short_title: "Calculate Poisson uncertainties"
+    requires_steps: [PD_sample]
+    configuration:
+      with_processing_keys: [sample]
+
+  TI:
+    module: Divide
+    short_title: "Normalize by frame exposure time"
+    requires_steps: [PU]
+    configuration:
+      divisor_source: sample::entry/instrument/detector/frame_exposure_time
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::entry/instrument/detector/frame_exposure_time_uncertainty
+      divisor_units_source: sample::entry/instrument/detector/frame_exposure_time@units
+      with_processing_keys: [sample]
+
+  DC:
+    module: Subtract
+    short_title: "Subtract darkcurrent"
+    requires_steps: [TI]
+    configuration:
+      <<: *subtract_darkcurrent_common
+      with_processing_keys: [sample]
+
+  FL:
+    module: Divide
+    short_title: "Normalize by relative flux"
+    requires_steps: [DC]
+    configuration:
+      divisor_source: sample::entry/sample/beam/relative_flux
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::entry/sample/beam/relative_flux_uncertainty
+      divisor_units_source: sample::entry/sample/beam/relative_flux@units
+      with_processing_keys: [sample]
+
+  TR:
+    module: Divide
+    short_title: "Normalize by transmission"
+    requires_steps: [FL]
+    configuration:
+      divisor_source: sample::entry/sample/transmission
+      divisor_uncertainties_sources:
+        propagate_to_all: sample::entry/sample/transmission_uncertainty
+      divisor_units_source: sample::entry/sample/transmission@units
+      with_processing_keys: [sample]
+
+  FA:
+    module: ReduceDimensionality
+    short_title: "Reduce dimensionality (mean)"
+    requires_steps: [TR]
+    configuration:
+      <<: *reduce_axis0_mean_common
+      with_processing_keys: [sample]
+
+  # -----------------------
+  # Intensity calibration background pipeline
+  # -----------------------
+  PU_i_bg:
+    module: PoissonUncertainties
+    short_title: "Poisson unc. for int. cal. bgnd"
+    requires_steps: [PD_intensity_calibration_background]
+    configuration:
+      with_processing_keys: [intensity_calibration_background]
+
+  TI_i_bg:
+    module: Divide
+    short_title: "Normalize by frame exposure time"
+    requires_steps: [PU_i_bg]
+    configuration:
+      divisor_source: intensity_calibration_background::entry/instrument/detector/frame_exposure_time
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration_background::entry/instrument/detector/frame_exposure_time_uncertainty
+      divisor_units_source: intensity_calibration_background::entry/instrument/detector/frame_exposure_time@units
+      with_processing_keys: [intensity_calibration_background]
+
+  DC_i_bg:
+    module: Subtract
+    short_title: "Subtract darkcurrent"
+    requires_steps: [TI_i_bg]
+    configuration:
+      <<: *subtract_darkcurrent_common
+      with_processing_keys: [intensity_calibration_background]
+
+  FL_i_bg:
+    module: Divide
+    short_title: "Normalize by relative flux"
+    requires_steps: [DC_i_bg]
+    configuration:
+      divisor_source: intensity_calibration_background::entry/sample/beam/relative_flux
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration_background::entry/sample/beam/relative_flux_uncertainty
+      divisor_units_source: intensity_calibration_background::entry/sample/beam/relative_flux@units
+      with_processing_keys: [intensity_calibration_background]
+
+  TR_i_bg:
+    module: Divide
+    short_title: "Normalize by transmission"
+    requires_steps: [FL_i_bg]
+    configuration:
+      divisor_source: intensity_calibration_background::entry/sample/transmission
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration_background::entry/sample/transmission_uncertainty
+      divisor_units_source: intensity_calibration_background::entry/sample/transmission@units
+      with_processing_keys: [intensity_calibration_background]
+
+  FA_i_bg:
+    module: ReduceDimensionality
+    short_title: "Reduce dimensionality (mean)"
+    requires_steps: [TR_i_bg]
+    configuration:
+      <<: *reduce_axis0_mean_common
+      with_processing_keys: [intensity_calibration_background]
+
+  # -----------------------
+  # Intensity calibration pipeline
+  # -----------------------
+  PU_i:
+    module: PoissonUncertainties
+    short_title: "Poisson unc. for int. cal."
+    requires_steps: [PD_intensity_calibration]
+    configuration:
+      with_processing_keys: [intensity_calibration]
+
+  TI_i:
+    module: Divide
+    short_title: "Normalize by frame exposure time"
+    requires_steps: [PU_i]
+    configuration:
+      divisor_source: intensity_calibration::entry/instrument/detector/frame_exposure_time
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration::entry/instrument/detector/frame_exposure_time_uncertainty
+      divisor_units_source: intensity_calibration::entry/instrument/detector/frame_exposure_time@units
+      with_processing_keys: [intensity_calibration]
+
+  DC_i:
+    module: Subtract
+    short_title: "Subtract darkcurrent"
+    requires_steps: [TI_i]
+    configuration:
+      <<: *subtract_darkcurrent_common
+      with_processing_keys: [intensity_calibration]
+
+  FL_i:
+    module: Divide
+    short_title: "Normalize by relative flux"
+    requires_steps: [DC_i]
+    configuration:
+      divisor_source: intensity_calibration::entry/sample/beam/relative_flux
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration::entry/sample/beam/relative_flux_uncertainty
+      divisor_units_source: intensity_calibration::entry/sample/beam/relative_flux@units
+      with_processing_keys: [intensity_calibration]
+
+  TR_i:
+    module: Divide
+    short_title: "Normalize by transmission"
+    requires_steps: [FL_i]
+    configuration:
+      divisor_source: intensity_calibration::entry/sample/transmission
+      divisor_uncertainties_sources:
+        propagate_to_all: intensity_calibration::entry/sample/transmission_uncertainty
+      divisor_units_source: intensity_calibration::entry/sample/transmission@units
+      with_processing_keys: [intensity_calibration]
+
+  FA_i:
+    module: ReduceDimensionality
+    short_title: "Reduce dimensionality (mean)"
+    requires_steps: [TR_i]
+    configuration:
+      <<: *reduce_axis0_mean_common
+      with_processing_keys: [intensity_calibration]

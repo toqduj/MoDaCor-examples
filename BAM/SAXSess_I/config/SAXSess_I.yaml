@@ -1,0 +1,51 @@
+# SAXSess-I constants used for the 2026-06-08 N008 acquisition.
+#
+# These values were carried over from the supplied legacy processing notebook
+# and its static_data.yaml. They should be checked against the instrument log
+# before the data release is frozen. Measurement-specific sample thicknesses
+# and relationships remain in data/20260608_N008/metadata_N008.xlsx.
+instrument:
+  name: "SAXSess I"
+  type: "X-ray scattering"
+  manufacturer: "Anton Paar"
+  model: "SAXSess"
+
+data_settings:
+  approx_beam_center_pixel: 137          # Initial beam-centre guess, in strips.
+  peak_max_search_width: 5               # Search half-width, in strips.
+  fluorescence_pixel_range: [400, 900]   # Lead-shielded fluorescence region.
+  frame_exposure_time:
+    value: 10.0
+    units: "s"
+    uncertainty: 0.1
+
+wavelength:
+  value: 0.1542
+  units: "nm"
+  uncertainty: 0.0005
+detector:
+  name: "Mythen2"
+  type: "1D strip detector"
+  manufacturer: "Dectris"
+  n_pixels: 1280
+  darkcurrent:
+    value: 1e-8
+    units: "counts/second"
+    uncertainty: 0.1e-8
+  pixel_size: 
+    value: [0.05, 8.0]
+    units: "mm"
+    uncertainty: [0.001, 0.1]
+  pixel_height:
+    value: 0.05
+    units: "mm"
+    uncertainty: 0.0005
+  pixel_width:
+    value: 8.0
+    units: "mm"
+    uncertainty: 0.1
+geometry:
+  sample_to_detector_distance:
+    value: 306.8
+    units: "mm"
+    uncertainty: 1.0

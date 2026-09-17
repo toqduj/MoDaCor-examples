@@ -14,9 +14,9 @@ decisions remain open, and the final release will pin an exact MoDaCor version.
 | --- | --- | --- | --- |
 | BAM | MOUSE | Ten-configuration sample/background pair and solids pipelines | Runnable example |
 | DLS | I22 | Four SAXS/WAXS measurements, background, calibration, masks, and four focused notebooks | Runnable batch plus Buffer/HDF/Tiled chunk demonstrations; full archive run pending |
-| BAM | SAXSess I | Placeholder | Planned |
+| BAM | SAXSess I | Six N008 aliquots with complete manual-instrument calibration set | Runnable absolute-intensity example |
 | BAM | SAXSess II | Placeholder | Planned |
-| DLS | B21 | Placeholder | Planned |
+| DLS | B21 | BSA dilution series, DAWN references, and chunked-HDF notebook scaffold | Processing design pending |
 | DLS | DL-SAXS | Placeholder | Planned |
 | TU Graz | To be defined | Placeholder | Planned |
 

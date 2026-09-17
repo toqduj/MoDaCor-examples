@@ -1,0 +1,16 @@
+BAM SAXSess-I N008 example data
+
+The data files listed in data-manifest.json are licensed under the Creative
+Commons Attribution 4.0 International Public License (CC BY 4.0).
+
+License summary: https://creativecommons.org/licenses/by/4.0/
+Legal code: https://creativecommons.org/licenses/by/4.0/legalcode
+
+Attribution
+
+Please cite the version-specific Zenodo record for the BAM SAXSess-I N008
+example data, retain the creator and DOI metadata supplied there, and indicate
+whether changes were made.
+
+No endorsement by BAM or the contributors is implied. Other rights, including
+privacy and personality rights, may still apply.
